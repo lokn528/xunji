@@ -902,3 +902,75 @@ textarea {
   border-color: var(--danger);
   color: var(--danger);
 }
+
+/* ------------------------------------------- 不在 Tauri 里的说明页 */
+
+.not-in-tauri {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
+
+.not-in-tauri-card {
+  max-width: 620px;
+  border: var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 30px 34px 26px;
+  box-shadow: var(--shadow);
+}
+
+.not-in-tauri-card h1 {
+  margin: 0;
+  font-size: 26px;
+  letter-spacing: 0.08em;
+}
+
+.not-in-tauri-card .tagline {
+  margin: 4px 0 20px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.not-in-tauri-card h2 {
+  margin: 22px 0 8px;
+  font-size: 14px;
+}
+
+.not-in-tauri-card ol {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13.5px;
+  line-height: 1.9;
+}
+
+.not-in-tauri-card code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 1px 6px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  background: var(--paper);
+}
+
+.notice {
+  border: var(--line);
+  border-radius: var(--radius);
+  background: var(--warn-soft);
+  border-color: var(--warn);
+  padding: 14px 16px;
+}
+
+.notice strong {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--warn);
+}
+
+.notice p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.65;
+}

@@ -8,6 +8,11 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(() => ({
   plugins: [react()],
 
+  // 用相对路径引用构建产物。
+  // 默认的绝对路径 "/assets/..." 在 file:// 下会被解析到磁盘根目录，
+  // 导致 CORS 拦截、页面全白。
+  base: "./",
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors
