@@ -25,7 +25,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 # SQLite（bundled：编译期内嵌，无需用户另装 SQLite）
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.32", features = ["bundled", "backup"] }
 
 # OpenAI 兼容接口调用（rustls：免 OpenSSL 依赖）
 reqwest = { version = "0.12", default-features = false, features = [

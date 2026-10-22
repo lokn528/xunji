@@ -81,11 +81,13 @@ npx tsc --noEmit
 
 | 内容 | 位置 |
 |---|---|
-| 数据库 | `%APPDATA%\app.xunji.desktop\xunji.db` |
-| 缩略图缓存 | `%APPDATA%\app.xunji.desktop\thumbs\` |
+| 数据库 | 发布版 `xunji.exe` 同目录下的 `xunji.db` |
+| 缩略图缓存 | 发布版 `xunji.exe` 同目录下的 `thumbs\` |
 | API Key | Windows 凭据库（服务名 `xunji`） |
 
-备份就是复制 `xunji.db`。缩略图缓存可随时清，会自动重建。
+整个程序目录可以一起移动：发布版的数据跟着 `xunji.exe` 走。首次从旧版升级时，
+程序会把 `%APPDATA%\app.xunji.desktop` 中已有的数据库和缩略图合并到新目录，原数据
+不会删除。备份就是复制 `xunji.db`。缩略图缓存可随时清，会自动重建。
 
 ## 右键菜单
 

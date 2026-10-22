@@ -33,7 +33,7 @@ export default function NotInTauri() {
           </li>
         </ol>
         <p className="muted" style={{ fontSize: 12, marginTop: 18 }}>
-          数据位置：%APPDATA%\app.xunji.desktop\xunji.db
+          发布版数据位置：xunji.exe 同目录下的 xunji.db
         </p>
       </div>
     </div>
