@@ -86,6 +86,14 @@ export interface FolderChild {
   isDir: boolean;
 }
 
+export interface AppInfo {
+  dataDir: string;
+  dbPath: string;
+  thumbDir: string;
+  exePath: string;
+  version: string;
+}
+
 /** Rust 侧返回的错误结构。 */
 export interface AppError {
   code: string;

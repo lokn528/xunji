@@ -6,6 +6,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import type {
   AiConfigInput,
   AiSuggestion,
+  AppInfo,
   Card,
   Category,
   FolderChild,
@@ -50,6 +51,7 @@ export const api = {
 
   // ---- 设置 ----
   getSettings: () => invoke<Settings>("get_settings"),
+  getAppInfo: () => invoke<AppInfo>("get_app_info"),
   saveSettings: (settings: Settings) =>
     invoke<Settings>("save_settings", { settings }),
   setAiConfig: (config: AiConfigInput) =>
@@ -61,6 +63,11 @@ export const api = {
   analyzeCard: (cardId: string) =>
     invoke<AiSuggestion>("analyze_card", { cardId }),
   testAiConnection: () => invoke<string>("test_ai_connection"),
+
+  // ---- 系统 ----
+  installShellMenu: () => invoke<string>("install_shell_menu"),
+  uninstallShellMenu: () => invoke<string>("uninstall_shell_menu"),
+  shellMenuInstalled: () => invoke<boolean>("shell_menu_installed"),
 };
 
 /** 把本地文件路径转成 WebView 可显示的 URL——用于展示缩略图。 */
