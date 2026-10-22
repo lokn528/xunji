@@ -1,50 +1,73 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+# 循迹（xunji）Constitution
+
+本项目是一个本地文件卡片索引桌面应用。本宪法约束「循迹」的全部开发活动。
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. 文件本体永不出本机
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+循迹是"参谋"，不是"管家"。被收录文件的本体始终留在用户本机磁盘，任何代码路径都
+不得把文件内容上传到服务器。数据库只存路径与元数据，不存文件副本。
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+**理由**：用户收集的是自己的文献、作业与私人材料，上传即意味着隐私边界被跨越，
+且与"工具只做参谋"的产品定位直接冲突。
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### II. AI 只建议，绝不自动决策
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+AI 产出的是建议（一句话说明、建议分类），必须先进输入框、由用户确认或修改后才
+落库。系统不得自动搬动文件、自动归档、自动改写用户写下的说明。
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+**理由**：用户对"文件去哪了"必须有最终控制权。自动归档一旦出错，代价是文件
+位置丢失，比没有功能更糟。
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+### III. AI 失败绝不阻塞主流程
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+导入建卡是主路径，AI 增强是旁路。key 未配置、网络失败、返回异常、超时——任何
+AI 故障都不得阻断导入。卡片照常创建，说明留空并标记"待写"，界面给出"AI 不可用，
+可手动填写"的提示。
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+**理由**：AI 供应商不稳定是常态而非例外。把它放在旁路上，主流程才是可靠的。
+
+### IV. 最小内容发送
+
+调用 AI 时只发送生成说明所必需的内容：文件名、文件类型、用户开启"仅用文件名
+分析"时则不发送任何文件内容。提供该开关并默认保守。
+
+**理由**：隐私不能只靠"我们不主动上传"来保证，还要靠"我们根本就没拿到那些内容"。
+默认关闭内容发送，用户主动开启才扩大暴露面。
+
+### V. 卡片以路径为唯一真实来源
+
+一张卡片的身份是它在磁盘上的位置（file_path），不是文件名。file_path 指向的
+实体被移动、改名或删除时，卡片标记"源文件丢失"并提供"重新定位"；不得因此
+删除卡片或悄悄改指到别的文件。
+
+**理由**：文件名会重复、会变；路径才是找回它的凭据。丢失了可重新绑定的入口，
+用户就永久失去了这件东西。
+
+## 技术约束
+
+- 桌面壳使用 Tauri 2 + Rust；前端 React + TypeScript。
+- 数据存储使用本地 SQLite 单文件，备份即复制文件。
+- 文件操作（移动、复制、打开、定位所在目录）在 Rust 侧完成。
+- API Key 存系统凭据库，不以明文写入配置文件。
+- AI 调用走 OpenAI 兼容的 `/chat/completions`，以兼容国产供应商与中转站。
+- 本阶段为 Windows 优先的单机应用，不引入账号体系与云同步。
+
+## 开发流程
+
+- 每个特性走完整的 Spec Kit 链路：specify → plan → tasks → implement → converge。
+- 卡片 CRUD 与状态持久化、AI 响应解析、路径处理与重定位、重复检测必须有单元级
+  自动化测试。
+- 导入的失败必须给出明确原因，不得产生半成品卡片：目标位置磁盘满或无权限时
+  报错并中止；源文件无读取权限时仍建卡但记录失败原因。
+- 重复导入同一 file_path 时提示"已收录"，不重复建卡。
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+本宪法优先于其他一切实践。修订原则或约束需说明理由、影响范围与迁移方案，
+并按语义化版本号递增：删除或重定义原则升 MAJOR，新增原则或实质扩充约束升
+MINOR，措辞澄清与纠正错字升 PATCH。全部 PR 与评审必须核验对本宪法的符合性；
+偏离本宪法的实现需在评审中显式说明理由。所有后续变更须同步更新本文件。
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Version**: 1.0.0 | **Ratified**: 2026-10-22 | **Last Amended**: 2026-10-22
