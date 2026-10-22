@@ -1,0 +1,56 @@
+export type PageKey = "import" | "timeline" | "category" | "settings";
+
+const PAGES: { key: PageKey; label: string; icon: string }[] = [
+  { key: "import", label: "导入", icon: "＋" },
+  { key: "timeline", label: "时间线", icon: "≣" },
+  { key: "category", label: "分类", icon: "⌗" },
+  { key: "settings", label: "设置", icon: "⚙" },
+];
+
+export default function Sidebar({
+  page,
+  onNavigate,
+  cardCount,
+}: {
+  page: PageKey;
+  onNavigate: (p: PageKey) => void;
+  cardCount: number;
+}) {
+  return (
+    <aside className="sidebar">
+      <div className="brand">
+        <h1>循迹</h1>
+        <p>所有丢过的东西，有迹可循</p>
+      </div>
+
+      <nav className="nav">
+        {PAGES.map((p) => (
+          <button
+            key={p.key}
+            onClick={() => onNavigate(p.key)}
+            aria-current={page === p.key ? "page" : undefined}
+          >
+            <span className="ico" aria-hidden="true">
+              {p.icon}
+            </span>
+            <span>{p.label}</span>
+            {p.key === "timeline" && cardCount > 0 && (
+              <span className="spacer" />
+            )}
+            {p.key === "timeline" && cardCount > 0 && (
+              <span className="muted" style={{ fontSize: 11 }}>
+                {cardCount}
+              </span>
+            )}
+          </button>
+        ))}
+      </nav>
+
+      <div className="sidebar-foot">
+        文件留在本机。
+        <br />
+        循迹只做参谋。
+      </div>
+    </aside>
+  );
+}

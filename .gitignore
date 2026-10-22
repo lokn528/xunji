@@ -6,10 +6,16 @@
 !.agents/skills/**
 
 # Local editor / OS noise
-.vscode/
+.vscode/*
+!.vscode/extensions.json
 .idea/
 .DS_Store
 Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
 # Python
 __pycache__/
@@ -25,3 +31,9 @@ node_modules/
 dist/
 build/
 *.egg-info/
+dist-ssr
+*.local
+
+# Rust / Tauri
+src-tauri/target/
+src-tauri/gen/schemas

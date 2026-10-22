@@ -1,0 +1,62 @@
+[package]
+name = "xunji"
+version = "0.1.0"
+description = "循迹 —— 本地文件卡片索引工具"
+authors = ["xunji"]
+edition = "2024"
+rust-version = "1.85"
+
+[lib]
+name = "xunji_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-autostart = "2"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# SQLite（bundled：编译期内嵌，无需用户另装 SQLite）
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+# OpenAI 兼容接口调用（rustls：免 OpenSSL 依赖）
+reqwest = { version = "0.12", default-features = false, features = [
+  "rustls-tls",
+  "json",
+  "charset",
+  "http2",
+] }
+
+# Windows 凭据库：存放 API Key，不落明文
+keyring = { version = "3", features = ["windows-native"] }
+
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "2"
+image = { version = "0.25", default-features = false, features = [
+  "jpeg",
+  "png",
+  "gif",
+  "bmp",
+  "webp",
+] }
+
+# Windows 注册表：写入「发送到 循迹」右键菜单（仅 Windows 平台）
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true
