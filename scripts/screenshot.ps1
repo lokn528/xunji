@@ -18,6 +18,23 @@ param(
 
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
+# 必须先声明 per-monitor DPI 感知：否则 GetWindowRect 返回的是逻辑坐标，
+# 而 CopyFromScreen 接受物理坐标，两者混用会抓错区域（表现为"右边被裁掉"）。
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class Dpi {
+  [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr v);
+  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+  public static void Enable() {
+    // -4 = PER_MONITOR_AWARE_V2
+    try { if (SetProcessDpiAwarenessContext(new IntPtr(-4))) return; } catch {}
+    try { SetProcessDPIAware(); } catch {}
+  }
+}
+"@
+[Dpi]::Enable()
+
 if ($WindowTitle) {
     Add-Type @"
 using System;
@@ -29,6 +46,7 @@ public class Win {
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int n);
   [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr dc, uint flags);
+  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc cb, IntPtr l);
   [DllImport("user32.dll")] public static extern int GetWindowTextLength(IntPtr h);
   [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
@@ -75,10 +93,16 @@ public class Win {
     $h = $r.Bottom - $r.Top
     $bmp = New-Object System.Drawing.Bitmap $w, $h
     $g = [System.Drawing.Graphics]::FromImage($bmp)
-    # PrintWindow 直接取窗口内容，不受其他窗口遮挡影响
-    $hdc = $g.GetHdc()
-    [void][Win]::PrintWindow($hwnd, $hdc, 2)
-    $g.ReleaseHdc($hdc)
+    # 用屏幕抓取而不是 PrintWindow：WebView2 的合成表面在 PrintWindow 下
+    # 往往只渲染出一部分，会让人误判成"布局被裁切"。
+    # 抓屏前先把窗口提到最前，抓完再放回去。
+    $topmost = [IntPtr](-1)
+    $notop = [IntPtr](-2)
+    [void][Win]::SetWindowPos($hwnd, $topmost, 0, 0, 0, 0, 0x0003)  # SWP_NOMOVE|SWP_NOSIZE
+    [void][Win]::SetForegroundWindow($hwnd)
+    Start-Sleep -Milliseconds 600
+    $g.CopyFromScreen($r.Left, $r.Top, 0, 0, $bmp.Size)
+    [void][Win]::SetWindowPos($hwnd, $notop, 0, 0, 0, 0, 0x0003)
 }
 else {
     $bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen

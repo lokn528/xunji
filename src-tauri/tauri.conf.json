@@ -17,7 +17,8 @@
         "height": 800,
         "minWidth": 940,
         "minHeight": 600,
-        "resizable": true
+        "resizable": true,
+        "theme": "Dark"
       }
     ],
     "security": {

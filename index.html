@@ -17,17 +17,31 @@
         var root = document.getElementById("root");
         if (!root || root.childElementCount > 0) return;
         root.innerHTML =
-          '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:32px;background:#f2efe6;color:#16130f;font-family:system-ui,-apple-system,\'PingFang SC\',\'Microsoft YaHei\',sans-serif">' +
-          '<div style="max-width:620px;background:#fffdf7;border:2px solid #16130f;border-radius:10px;padding:30px 34px">' +
-          '<h1 style="margin:0;font-size:26px;letter-spacing:.08em">循迹</h1>' +
-          '<p style="margin:4px 0 20px;color:#6d675e;font-size:13px">所有丢过的东西，有迹可循</p>' +
-          '<div style="border:2px solid #d97706;background:#fdf0d5;border-radius:10px;padding:14px 16px">' +
-          '<strong style="display:block;margin-bottom:5px;color:#d97706">这是桌面应用，不是网页。</strong>' +
-          '<p style="margin:0;font-size:13px;line-height:1.65">循迹把卡片存在本机 SQLite，文件操作与 AI 密钥都放在 Rust 侧处理，浏览器里跑不起来。</p></div>' +
-          '<h2 style="margin:22px 0 8px;font-size:14px">怎么打开</h2>' +
-          '<ol style="margin:0;padding-left:20px;font-size:13.5px;line-height:1.9">' +
-          '<li>直接运行 <code style="font-family:Consolas,monospace;font-size:12px">src-tauri\\target\\release\\xunji.exe</code></li>' +
-          '<li>或在项目目录执行 <code style="font-family:Consolas,monospace;font-size:12px">npm run tauri dev</code></li></ol>' +
+          '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:32px;' +
+          'background-color:#0b1322;color:rgba(255,255,255,.94);' +
+          'background-image:radial-gradient(1100px 760px at 16% 10%,rgba(124,156,196,.28),transparent 62%),' +
+          'radial-gradient(900px 680px at 84% 82%,rgba(51,81,122,.35),transparent 64%),' +
+          'radial-gradient(560px 440px at 70% 20%,rgba(228,184,99,.12),transparent 66%);' +
+          'font-family:system-ui,-apple-system,\'PingFang SC\',\'Microsoft YaHei\',sans-serif">' +
+          '<div style="max-width:620px;background:rgba(255,255,255,.05);' +
+          'background-image:linear-gradient(to bottom,rgba(255,255,255,.12),transparent);' +
+          'backdrop-filter:blur(40px) saturate(180%);-webkit-backdrop-filter:blur(40px) saturate(180%);' +
+          'border:1px solid rgba(255,255,255,.15);border-radius:14px;padding:32px 36px;' +
+          'box-shadow:0 16px 40px rgba(3,7,18,.5),inset 0 1px 0 rgba(255,255,255,.22),inset 0 -1px 0 rgba(2,6,16,.35)">' +
+          '<h1 style="margin:0;font-size:26px;font-weight:600;letter-spacing:.1em">循迹</h1>' +
+          '<p style="margin:5px 0 22px;color:rgba(255,255,255,.62);font-size:13px">所有丢过的东西，有迹可循</p>' +
+          '<div style="border:1px solid rgba(228,184,99,.4);background:rgba(228,184,99,.1);border-radius:10px;padding:15px 17px">' +
+          '<strong style="display:block;margin-bottom:5px;color:#f3dca8">这是桌面应用，不是网页。</strong>' +
+          '<p style="margin:0;font-size:13px;line-height:1.65;color:rgba(255,255,255,.62)">循迹把卡片存在本机 SQLite，' +
+          '文件操作与 AI 密钥都放在 Rust 侧处理，浏览器里跑不起来。</p></div>' +
+          '<h2 style="margin:24px 0 8px;font-size:14px;font-weight:600">怎么打开</h2>' +
+          '<ol style="margin:0;padding-left:20px;font-size:13.5px;line-height:1.95;color:rgba(255,255,255,.62)">' +
+          '<li>直接运行 <code style="font-family:Consolas,monospace;font-size:12px;padding:2px 7px;' +
+          'border:1px solid rgba(255,255,255,.15);border-radius:6px;background:rgba(255,255,255,.08)">' +
+          'src-tauri\\target\\release\\xunji.exe</code></li>' +
+          '<li>或在项目目录执行 <code style="font-family:Consolas,monospace;font-size:12px;padding:2px 7px;' +
+          'border:1px solid rgba(255,255,255,.15);border-radius:6px;background:rgba(255,255,255,.08)">' +
+          'npm run tauri dev</code></li></ol>' +
           '</div></div>';
       }, 1200);
     </script>
