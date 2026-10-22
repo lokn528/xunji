@@ -139,16 +139,10 @@ export default function ImportPage({
     }
   };
 
-  const noDefault = !settings?.defaultDir?.trim();
-
   return (
     <>
-      <div className="page-head">
+      <div className="page-head page-head-solo">
         <h2>导入</h2>
-        <p>
-          把丢在一旁的文件丢进来，给它发一张户口卡。
-          {noDefault && " 先到设置里选一个默认存储位置。"}
-        </p>
       </div>
 
       <div

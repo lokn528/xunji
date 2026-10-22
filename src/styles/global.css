@@ -260,6 +260,11 @@ button {
   gap: 6px;
 }
 
+/* 设置沉到侧栏底部 */
+.nav-bottom {
+  margin-top: auto;
+}
+
 .nav button {
   position: relative;
   display: flex;
@@ -319,14 +324,6 @@ button {
   opacity: 0.85;
 }
 
-.sidebar-foot {
-  margin-top: auto;
-  padding: 0 8px;
-  font-size: 11px;
-  line-height: 1.6;
-  color: var(--tx-3);
-}
-
 .main {
   min-width: 0;
   overflow-y: auto;
@@ -335,6 +332,11 @@ button {
 
 .page-head {
   margin-bottom: 22px;
+}
+
+/* 没有副标题的页头：收紧下边距，把省下来的高度留给内容 */
+.page-head-solo {
+  margin-bottom: 16px;
 }
 
 .page-head h2 {
@@ -690,7 +692,7 @@ button {
 /* --------------------------------------------------------- 导入页 */
 
 .dropzone {
-  padding: 54px 24px;
+  padding: 70px 24px;
   border: 1px dashed rgba(124, 156, 196, 0.45);
   border-radius: var(--radius);
   background-color: var(--glass-1);

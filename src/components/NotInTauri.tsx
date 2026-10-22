@@ -10,7 +10,7 @@ export default function NotInTauri() {
     <div className="not-in-tauri">
       <div className="not-in-tauri-card">
         <h1>循迹</h1>
-        <p className="tagline">所有丢过的东西，有迹可循</p>
+        <p className="tagline">所有东西都有迹可寻</p>
         <div className="notice">
           <strong>这是桌面应用，不是网页。</strong>
           <p>
