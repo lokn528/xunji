@@ -33,6 +33,7 @@ export default function SettingsPage({
   const [keyPresent, setKeyPresent] = useState(false);
   const [info, setInfo] = useState<AppInfo | null>(null);
   const [menuInstalled, setMenuInstalled] = useState(false);
+  const [autostart, setAutostart] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -50,6 +51,7 @@ export default function SettingsPage({
     api.hasApiKey().then(setKeyPresent).catch(() => setKeyPresent(false));
     api.getAppInfo().then(setInfo).catch(() => undefined);
     api.shellMenuInstalled?.().then(setMenuInstalled).catch(() => undefined);
+    api.getAutostart().then(setAutostart).catch(() => setAutostart(false));
   }, []);
 
   const chooseDir = async () => {
@@ -137,6 +139,19 @@ export default function SettingsPage({
       toast.ok(msg);
     } catch (e) {
       toast.err("操作失败", errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleAutostart = async () => {
+    setBusy(true);
+    try {
+      const next = await api.setAutostart(!autostart);
+      setAutostart(next);
+      toast.ok(next ? "已设为开机自启" : "已关闭开机自启");
+    } catch (e) {
+      toast.err("设置失败", errorText(e));
     } finally {
       setBusy(false);
     }
@@ -316,6 +331,15 @@ export default function SettingsPage({
           </button>
           <span className="muted" style={{ fontSize: 12 }}>
             {menuInstalled ? "已注册" : "未注册"}
+          </span>
+        </div>
+
+        <div className="row row-wrap" style={{ marginTop: 12 }}>
+          <button className="btn" onClick={toggleAutostart} disabled={busy}>
+            {autostart ? "关闭开机自启" : "开启开机自启"}
+          </button>
+          <span className="muted" style={{ fontSize: 12 }}>
+            {autostart ? "已开启" : "未开启"}
           </span>
         </div>
 

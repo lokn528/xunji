@@ -54,8 +54,8 @@ npx tsc --noEmit
 
 | 内容 | 位置 |
 |---|---|
-| 数据库 | `%APPDATA%\循迹\xunji.db` |
-| 缩略图缓存 | `%APPDATA%\循迹\thumbs\` |
+| 数据库 | `%APPDATA%\app.xunji.desktop\xunji.db` |
+| 缩略图缓存 | `%APPDATA%\app.xunji.desktop\thumbs\` |
 | API Key | Windows 凭据库（服务名 `xunji`） |
 
 备份就是复制 `xunji.db`。缩略图缓存可随时清，会自动重建。

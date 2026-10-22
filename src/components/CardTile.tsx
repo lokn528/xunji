@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { api, formatTime, thumbUrl } from "../lib/ipc";
-import type { Card } from "../lib/types";
+import { api, formatSize, formatTime, thumbUrl } from "../lib/ipc";
+import type { Card, FolderChild } from "../lib/types";
 import { errorText } from "../lib/types";
 import { useToast } from "./Toast";
 
@@ -24,7 +24,8 @@ const EXT_ICON: Record<string, string> = {
   rar: "🗜️",
 };
 
-function iconFor(path: string): string {
+function iconFor(path: string, isDir: boolean): string {
+  if (isDir) return "📁";
   const ext = path.split(".").pop()?.toLowerCase() ?? "";
   return EXT_ICON[ext] ?? "📄";
 }
@@ -44,6 +45,8 @@ export default function CardTile({
 }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [children, setChildren] = useState<FolderChild[] | null>(null);
   const thumb = thumbUrl(card.thumbPath);
 
   const open = async () => {
@@ -74,6 +77,22 @@ export default function CardTile({
     }
   };
 
+  const toggleExpand = async () => {
+    if (expanded) {
+      setExpanded(false);
+      return;
+    }
+    setBusy(true);
+    try {
+      setChildren(await api.folderChildren(card.filePath));
+      setExpanded(true);
+    } catch (e) {
+      toast.err("读不了子项", errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <article className={`card${card.missing ? " missing" : ""}`}>
       <div className="card-thumb">
@@ -81,7 +100,7 @@ export default function CardTile({
           <img src={thumb} alt="" />
         ) : (
           <span className="placeholder" aria-hidden="true">
-            {iconFor(card.filePath)}
+            {iconFor(card.filePath, card.isDir)}
           </span>
         )}
       </div>
@@ -138,6 +157,16 @@ export default function CardTile({
           >
             说明
           </button>
+          {card.isDir && (
+            <button
+              className="btn btn-sm"
+              onClick={toggleExpand}
+              disabled={busy}
+              title="展开查看文件夹里的子项"
+            >
+              {expanded ? "收起" : "展开"}
+            </button>
+          )}
           <span className="spacer" />
           <button
             className="btn-icon"
@@ -148,6 +177,30 @@ export default function CardTile({
             {card.pinned ? "★" : "☆"}
           </button>
         </div>
+
+        {expanded && children && (
+          <div className="folder-children">
+            {children.length === 0 ? (
+              <div className="muted" style={{ fontSize: 12 }}>
+                这个文件夹是空的
+              </div>
+            ) : (
+              children.map((c) => (
+                <div className="folder-child" key={c.relativePath}>
+                  <span className="ico" aria-hidden="true">
+                    {c.isDir ? "📁" : "📄"}
+                  </span>
+                  <span className="nm" title={c.relativePath}>
+                    {c.relativePath}
+                  </span>
+                  <span className="sz muted">
+                    {c.isDir ? "—" : formatSize(c.size)}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
     </article>
   );

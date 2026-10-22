@@ -58,6 +58,9 @@ export const api = {
     invoke<Settings>("set_ai_config", { config }),
   hasApiKey: () => invoke<boolean>("has_api_key"),
   clearApiKey: () => invoke<void>("clear_api_key"),
+  getAutostart: () => invoke<boolean>("get_autostart"),
+  setAutostart: (enabled: boolean) =>
+    invoke<boolean>("set_autostart", { enabled }),
 
   // ---- AI ----
   analyzeCard: (cardId: string) =>

@@ -35,8 +35,8 @@ pub async fn analyze_card_inner(
         let card = state
             .with_db(|conn| db::get_card(conn, card_id))?
             .ok_or_else(|| AppError::Invalid("卡片不存在".into()))?;
-        let cats = state.with_db(|conn| db::list_categories(conn))?;
-        let settings = state.with_db(|conn| db::load_settings(conn))?;
+        let cats = state.with_db(db::list_categories)?;
+        let settings = state.with_db(db::load_settings)?;
         let excerpt = if settings.ai_filename_only {
             None
         } else {
@@ -73,7 +73,7 @@ pub async fn analyze_card_inner(
 /// 测试 AI 连通性。
 #[tauri::command]
 pub async fn test_ai_connection(state: State<'_, AppState>) -> AppResult<String> {
-    let settings = state.with_db(|conn| db::load_settings(conn))?;
+    let settings = state.with_db(db::load_settings)?;
     let api_key = super::settings::read_api_key()?;
     if settings.ai_base_url.trim().is_empty() || settings.ai_model.trim().is_empty() {
         return Err(AppError::AiUnavailable);

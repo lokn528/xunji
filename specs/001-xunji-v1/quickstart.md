@@ -38,16 +38,60 @@ npm run tauri build
 ## 跑测试
 
 ```bash
-cd src-tauri && cargo test     # Rust 侧：54 项单元测试
+cd src-tauri && cargo test     # Rust 侧：58 项单元测试
+npx vitest run                 # 前端：13 项单元测试
 npx tsc --noEmit               # 前端类型检查
+```
+
+## 打包可能遇到的坑
+
+### 1. `can't find crate for std`
+
+Rust 工具链装到一半被中断。修复：
+
+```bash
+rustup toolchain uninstall stable
+rustup toolchain install stable --profile minimal
+rustup component add clippy rustfmt
+```
+
+### 2. `link.exe not found` / 缺 kernel32.lib
+
+MSVC 编译工具装了但没装 Windows SDK。修复：装 Build Tools 时加上
+「使用 C++ 的桌面开发」工作负载，缺 SDK 会报缺 `kernel32.lib`。
+
+### 3. NSIS 打包报「系统无法将文件移到不同的磁盘驱动器」
+
+tauri-bundler 把 NSIS 解压到项目 `target/release` 再重命名到
+`%LOCALAPPDATA%\tauri\NSIS`，跨盘时 `rename` 会失败。解法是**预先把 NSIS 工具
+放好**，让打包器跳过下载与解压（它只检查 13 个必需文件是否齐全）：
+
+```powershell
+$cache = "$env:LOCALAPPDATA\tauri"
+
+# NSIS 本体
+curl.exe -L -o nsis.zip "https://github.com/tauri-apps/binary-releases/releases/download/nsis-3.13/nsis-3.13.zip"
+Expand-Archive nsis.zip nsisx -Force
+New-Item -ItemType Directory -Force -Path "$cache\NSIS" | Out-Null
+robocopy nsisx\nsis-3.13 "$cache\NSIS" /MIR
+
+# Tauri 自己的 NSIS 插件（单独下载，NSIS_REQUIRED_FILES 里列了它）
+curl.exe -L -o "$cache\NSIS\Plugins\x86-unicode\additional\nsis_tauri_utils.dll" `
+  "https://github.com/tauri-apps/nsis-tauri-utils/releases/download/nsis_tauri_utils-v0.5.3/nsis_tauri_utils.dll"
+```
+
+国内网络下载 GitHub 资产慢或超时，可以设镜像：
+
+```powershell
+$env:TAURI_BUNDLER_TOOLS_GITHUB_MIRROR = "https://你的镜像前缀"
 ```
 
 ## 数据在哪
 
 | 内容 | 位置 |
 |---|---|
-| 数据库 | `%APPDATA%\循迹\xunji.db` |
-| 缩略图缓存 | `%APPDATA%\循迹\thumbs\` |
+| 数据库 | `%APPDATA%\app.xunji.desktop\xunji.db` |
+| 缩略图缓存 | `%APPDATA%\app.xunji.desktop\thumbs\` |
 | API Key | Windows 凭据库（服务名 `xunji`，账户名 `ai_api_key`） |
 
 备份 = 复制 `xunji.db`。缩略图缓存可以随时清，会自动重建。
@@ -103,7 +147,7 @@ npx tsc --noEmit               # 前端类型检查
 
 ```powershell
 # 数据库里不应出现 API Key
-Select-String -Path "$env:APPDATA\循迹\xunji.db" -Pattern "sk-" -SimpleMatch
+Select-String -Path "$env:APPDATA\app.xunji.desktop\xunji.db" -Pattern "sk-" -SimpleMatch
 ```
 
 应无输出。

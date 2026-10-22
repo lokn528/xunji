@@ -10,14 +10,21 @@ use rusqlite::{params, Connection, OptionalExtension};
 use crate::error::{AppError, AppResult};
 use crate::models::{now_iso, Card, Category, Origin, PlacementMode, Settings};
 
-/// 期望的 schema 版本。
-const SCHEMA_VERSION: i64 = 0;
-
 /// version 0 的建表与索引语句。
 const SCHEMA_V0: &str = include_str!("../migrations/000_initial.sql");
 
-/// 迁移步骤表。每一项的 version 是"该步被应用后"的 user_version。
-const MIGRATIONS: &[(i64, &str)] = &[(0, SCHEMA_V0)];
+/// version 1：给卡片加 is_dir 字段。
+const SCHEMA_V1: &str = include_str!("../migrations/001_add_is_dir.sql");
+
+/// 迁移步骤表。
+///
+/// 约定：`user_version = N` 表示前 N 个迁移已应用。因此第 i 个迁移的 `version`
+/// 是 i，应用后 `user_version` 变成 i + 1。SQLite 的 `user_version` 默认是 0，
+/// 正好对应"一个迁移都还没应用"。
+const MIGRATIONS: &[(i64, &str)] = &[(0, SCHEMA_V0), (1, SCHEMA_V1)];
+
+/// 期望的 schema 版本，等于已应用迁移的条数。
+const SCHEMA_VERSION: i64 = MIGRATIONS.len() as i64;
 
 /// 打开数据库并确保 schema 为最新。
 pub fn open(path: &Path) -> AppResult<Connection> {
@@ -39,17 +46,17 @@ pub fn open_in_memory() -> AppResult<Connection> {
 
 /// 按 `user_version` 逐版本迁移。
 fn migrate(conn: &Connection) -> AppResult<()> {
-    let current: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+    let mut current: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
     if current > SCHEMA_VERSION {
         return Err(AppError::Database(format!(
             "数据库版本 {current} 高于当前程序支持的 {SCHEMA_VERSION}"
         )));
     }
-    // user_version = N 表示前 N 个迁移已应用。
     for (version, sql) in MIGRATIONS {
         if *version >= current {
             conn.execute_batch(sql)?;
-            conn.pragma_update(None, "user_version", *version + 1)?;
+            current = *version + 1;
+            conn.pragma_update(None, "user_version", current)?;
         }
     }
     Ok(())
@@ -62,7 +69,7 @@ pub fn list_cards(conn: &Connection) -> AppResult<Vec<Card>> {
     let mut stmt = conn.prepare(
         "SELECT id, display_name, summary, file_path, thumb_path, category_id,
                 origin, ai_generated, needs_summary, missing, pinned,
-                created_at, updated_at
+                created_at, updated_at, is_dir
            FROM cards
           ORDER BY pinned DESC, created_at DESC, id DESC",
     )?;
@@ -79,7 +86,7 @@ pub fn get_card(conn: &Connection, id: &str) -> AppResult<Option<Card>> {
     let mut stmt = conn.prepare(
         "SELECT id, display_name, summary, file_path, thumb_path, category_id,
                 origin, ai_generated, needs_summary, missing, pinned,
-                created_at, updated_at
+                created_at, updated_at, is_dir
            FROM cards WHERE id = ?1",
     )?;
     Ok(stmt.query_row(params![id], map_card).optional()?)
@@ -90,7 +97,7 @@ pub fn find_card_by_path(conn: &Connection, file_path: &str) -> AppResult<Option
     let mut stmt = conn.prepare(
         "SELECT id, display_name, summary, file_path, thumb_path, category_id,
                 origin, ai_generated, needs_summary, missing, pinned,
-                created_at, updated_at
+                created_at, updated_at, is_dir
            FROM cards WHERE file_path = ?1",
     )?;
     Ok(stmt.query_row(params![file_path], map_card).optional()?)
@@ -101,8 +108,8 @@ pub fn insert_card(conn: &Connection, card: &Card) -> AppResult<()> {
     let res = conn.execute(
         "INSERT INTO cards
            (id, display_name, summary, file_path, thumb_path, category_id, origin,
-            ai_generated, needs_summary, missing, pinned, created_at, updated_at)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+            ai_generated, needs_summary, missing, pinned, created_at, updated_at, is_dir)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
         params![
             card.id,
             card.display_name,
@@ -117,6 +124,7 @@ pub fn insert_card(conn: &Connection, card: &Card) -> AppResult<()> {
             card.pinned as i64,
             card.created_at,
             card.updated_at,
+            card.is_dir as i64,
         ],
     );
     match res {
@@ -395,6 +403,7 @@ pub fn save_settings(conn: &Connection, s: &Settings) -> AppResult<()> {
 /// 把一行查询结果映射为 `Card`。
 fn map_card(r: &rusqlite::Row<'_>) -> rusqlite::Result<Card> {
     let origin: String = r.get(6)?;
+    let is_dir: i64 = r.get(13)?;
     Ok(Card {
         id: r.get(0)?,
         display_name: r.get(1)?,
@@ -406,6 +415,7 @@ fn map_card(r: &rusqlite::Row<'_>) -> rusqlite::Result<Card> {
         ai_generated: r.get::<_, i64>(7)? != 0,
         needs_summary: r.get::<_, i64>(8)? != 0,
         missing: r.get::<_, i64>(9)? != 0,
+        is_dir: is_dir != 0,
         pinned: r.get::<_, i64>(10)? != 0,
         created_at: r.get(11)?,
         updated_at: r.get(12)?,
@@ -430,6 +440,7 @@ mod tests {
             ai_generated: false,
             needs_summary: true,
             missing: false,
+            is_dir: false,
             pinned: false,
             created_at: now_iso(),
             updated_at: now_iso(),
@@ -600,5 +611,44 @@ mod tests {
             )
             .unwrap();
         assert_eq!(leaked, 0, "设置表不得出现 key 形态的值");
+    }
+
+    #[test]
+    fn 迁移后版本号与预期一致() {
+        let conn = open_in_memory().unwrap();
+        let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(v, SCHEMA_VERSION, "user_version 应等于最新迁移版本");
+    }
+
+    #[test]
+    fn is_dir_列存在且默认_false() {
+        let conn = open_in_memory().unwrap();
+        let card = sample_card(r"C:\docs\a.txt");
+        insert_card(&conn, &card).unwrap();
+        let got = get_card(&conn, &card.id).unwrap().unwrap();
+        assert!(!got.is_dir, "默认应为普通文件");
+    }
+
+    #[test]
+    fn 旧版本数据库会被自动升级() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("old.db");
+
+        // 造一个只有 v0 schema 的旧库，user_version = 1 表示已应用 1 个迁移
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(SCHEMA_V0).unwrap();
+            conn.pragma_update(None, "user_version", 1i64).unwrap();
+        }
+
+        // 打开时应自动补上 is_dir 列
+        let conn = open(&path).unwrap();
+        let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(v, SCHEMA_VERSION, "旧库应被升级到最新版本");
+
+        let card = sample_card(r"C:\docs\a.txt");
+        insert_card(&conn, &card).unwrap();
+        let got = get_card(&conn, &card.id).unwrap().unwrap();
+        assert!(!got.is_dir, "升级后的卡片应能正常读写");
     }
 }

@@ -4,6 +4,7 @@
 //! 不出现在任何命令的返回值里（FR-020）。
 
 use tauri::State;
+use tauri_plugin_autostart::ManagerExt;
 
 use crate::db;
 use crate::error::{AppError, AppResult};
@@ -44,7 +45,7 @@ fn entry() -> AppResult<keyring::Entry> {
 /// 读取设置（不含 API Key）。
 #[tauri::command]
 pub fn get_settings(state: State<'_, AppState>) -> AppResult<Settings> {
-    state.with_db(|conn| db::load_settings(conn))
+    state.with_db(db::load_settings)
 }
 
 /// 保存设置（不含 API Key）。
@@ -80,7 +81,7 @@ pub fn set_ai_config(
         s.ai_temperature = config.temperature;
         s.ai_filename_only = config.filename_only;
         db::save_settings(conn, &s)?;
-        Ok(db::load_settings(conn)?)
+        db::load_settings(conn)
     })
 }
 
@@ -91,6 +92,29 @@ pub fn has_api_key() -> AppResult<bool> {
         Ok(e) => Ok(e.get_password().is_ok()),
         Err(_) => Ok(false),
     }
+}
+
+/// 查询是否已设置开机自启。
+#[tauri::command]
+pub fn get_autostart(app: tauri::AppHandle) -> AppResult<bool> {
+    app.autolaunch()
+        .is_enabled()
+        .map_err(|e| AppError::Io(format!("读取开机自启状态失败：{e}")))
+}
+
+/// 设置开机自启。
+#[tauri::command]
+pub fn set_autostart(app: tauri::AppHandle, enabled: bool) -> AppResult<bool> {
+    let launcher = app.autolaunch();
+    let result = if enabled {
+        launcher.enable()
+    } else {
+        launcher.disable()
+    };
+    result.map_err(|e| AppError::Io(format!("设置开机自启失败：{e}")))?;
+    app.autolaunch()
+        .is_enabled()
+        .map_err(|e| AppError::Io(format!("读取开机自启状态失败：{e}")))
 }
 
 /// 清除已存 API Key。

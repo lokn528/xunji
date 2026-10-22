@@ -51,6 +51,8 @@ pub struct Card {
     pub needs_summary: bool,
     /// 源文件已丢失。
     pub missing: bool,
+    /// 该卡片指向的是文件夹（前端据此提供「展开子项」入口）。
+    pub is_dir: bool,
     /// 置顶「近期要用」。
     pub pinned: bool,
     /// ISO 8601，固定宽度以保证字典序即时间序。

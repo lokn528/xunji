@@ -10,7 +10,7 @@ use crate::state::AppState;
 /// 查询全部分类，附各分类卡片数。
 #[tauri::command]
 pub fn list_categories(state: State<'_, AppState>) -> AppResult<Vec<Category>> {
-    state.with_db(|conn| db::list_categories(conn))
+    state.with_db(db::list_categories)
 }
 
 /// 创建分类。重名时报错。

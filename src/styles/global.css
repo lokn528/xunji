@@ -162,6 +162,8 @@ textarea {
 }
 
 .main {
+  /* grid 子项默认 min-width:auto，宽内容会把列撑爆并横向溢出 */
+  min-width: 0;
   overflow-y: auto;
   padding: 26px 30px 60px;
 }
@@ -193,6 +195,7 @@ textarea {
   background: var(--surface);
   color: var(--ink);
   font-weight: 500;
+  white-space: nowrap;
   transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.12s ease;
 }
 
@@ -345,6 +348,8 @@ textarea {
   background: var(--surface);
   padding: 20px 22px;
   margin-bottom: 18px;
+  /* 表单字段拉到 900px 宽会很难读，收到 760px 以内 */
+  max-width: 760px;
 }
 
 .panel > h3 {
@@ -451,8 +456,18 @@ textarea {
 }
 
 .import-bar .field {
-  flex: 1 1 220px;
+  flex: 1 1 260px;
+  min-width: 0;
   margin-bottom: 0;
+}
+
+.import-bar .field > .row {
+  min-width: 0;
+}
+
+.import-bar .field > .row > .input {
+  min-width: 0;
+  flex: 1;
 }
 
 .import-report {
@@ -622,7 +637,6 @@ textarea {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  direction: rtl;
   text-align: left;
 }
 
@@ -640,6 +654,43 @@ textarea {
   gap: 5px;
   flex-wrap: wrap;
   padding-top: 3px;
+}
+
+.folder-children {
+  margin-top: 4px;
+  padding-top: 7px;
+  border-top: 1px dashed var(--line-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.folder-child {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  font-size: 11.5px;
+}
+
+.folder-child .ico {
+  flex: 0 0 auto;
+  font-size: 11px;
+}
+
+.folder-child .nm {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.folder-child .sz {
+  flex: 0 0 auto;
+  font-size: 10.5px;
 }
 
 /* ------------------------------------------------------- 分类页 */

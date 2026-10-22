@@ -67,6 +67,8 @@ pub fn run() {
             commands::settings::set_ai_config,
             commands::settings::has_api_key,
             commands::settings::clear_api_key,
+            commands::settings::get_autostart,
+            commands::settings::set_autostart,
             commands::ai::analyze_card,
             commands::ai::test_ai_connection,
             shellmenu::install_shell_menu,

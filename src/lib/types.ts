@@ -16,6 +16,8 @@ export interface Card {
   aiGenerated: boolean;
   needsSummary: boolean;
   missing: boolean;
+  /** 该卡片指向的是文件夹。 */
+  isDir: boolean;
   pinned: boolean;
   createdAt: string;
   updatedAt: string;

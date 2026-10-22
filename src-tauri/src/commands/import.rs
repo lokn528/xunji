@@ -22,7 +22,7 @@ pub async fn import_paths(
     state: State<'_, AppState>,
     request: ImportRequest,
 ) -> AppResult<ImportResult> {
-    let settings = state.with_db(|conn| db::load_settings(conn))?;
+    let settings = state.with_db(db::load_settings)?;
 
     let placement = match request.placement {
         Some(p) => p,
@@ -210,6 +210,8 @@ fn build_card(source: &str, final_path: &str, origin: Origin, is_dir: bool) -> C
         // 说明留空 → 标记为待写（FR-006）
         needs_summary: true,
         missing: false,
+        // 文件夹卡片带 is_dir，前端据此提供「展开子项」入口（FR-025）
+        is_dir,
         pinned: false,
         created_at: now.clone(),
         updated_at: now,
@@ -304,7 +306,7 @@ mod tests {
         assert!(!src.exists(), "源文件应被移走");
         assert!(dst_dir.join("note.txt").exists(), "应落到目标目录");
 
-        let cards = state.with_db(|c| db::list_cards(c)).unwrap();
+        let cards = state.with_db(db::list_cards).unwrap();
         assert_eq!(cards.len(), 1);
         assert!(cards[0].needs_summary, "说明应标记待写");
         assert_eq!(cards[0].file_path, dst_dir.join("note.txt").to_string_lossy());
@@ -360,7 +362,7 @@ mod tests {
 
         assert!(second.existing_card_id.is_some(), "第二次应报已收录");
         assert_eq!(second.existing_card_id, first.card_id);
-        let count = state.with_db(|c| db::list_cards(c)).unwrap().len();
+        let count = state.with_db(db::list_cards).unwrap().len();
         assert_eq!(count, 1, "只应有一张卡");
     }
 
@@ -378,7 +380,7 @@ mod tests {
         .unwrap_err();
 
         assert!(matches!(err, AppError::SourceMissing(_)));
-        assert_eq!(state.with_db(|c| db::list_cards(c)).unwrap().len(), 0);
+        assert_eq!(state.with_db(db::list_cards).unwrap().len(), 0);
     }
 
     #[test]
@@ -420,7 +422,7 @@ mod tests {
         .unwrap_err();
 
         assert!(matches!(err, AppError::Io(_)), "应报文件操作失败");
-        assert_eq!(state.with_db(|c| db::list_cards(c)).unwrap().len(), 0, "不应留下卡片");
+        assert_eq!(state.with_db(db::list_cards).unwrap().len(), 0, "不应留下卡片");
     }
 
     #[test]
@@ -444,9 +446,32 @@ mod tests {
         .unwrap();
 
         assert!(item.card_id.is_some());
-        let cards = state.with_db(|c| db::list_cards(c)).unwrap();
+        let cards = state.with_db(db::list_cards).unwrap();
         assert_eq!(cards.len(), 1, "文件夹整体只建一张卡");
         assert!(dst_dir.join("myfolder").exists(), "文件夹应被移动");
+        assert!(cards[0].is_dir, "文件夹卡片应标记 is_dir");
+    }
+
+    #[test]
+    fn 普通文件的卡片不带_is_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let dst_dir = dir.path().join("dst");
+        std::fs::create_dir_all(&dst_dir).unwrap();
+        let src = dir.path().join("note.txt");
+        std::fs::write(&src, "hello").unwrap();
+
+        let state = make_state(dir.path());
+        import_one(
+            &state,
+            src.to_str().unwrap(),
+            dst_dir.to_str().unwrap(),
+            PlacementMode::Keep,
+            Origin::ImportedKept,
+        )
+        .unwrap();
+
+        let cards = state.with_db(db::list_cards).unwrap();
+        assert!(!cards[0].is_dir, "普通文件不应标记 is_dir");
     }
 
     #[test]
