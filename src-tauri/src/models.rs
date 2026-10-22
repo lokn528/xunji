@@ -112,6 +112,12 @@ pub struct ImportRequest {
     /// 导入后是否立即触发 AI 分析。默认不触发。
     #[serde(default)]
     pub analyze_after: bool,
+    /// 本批卡片统一归入的分类名；为空表示暂不分类。
+    #[serde(default)]
+    pub category: Option<String>,
+    /// 本批卡片统一写入的备注说明；为空表示待写。
+    #[serde(default)]
+    pub note: Option<String>,
     /// 来源标记：右键「发送到」为 sent_to。
     #[serde(default)]
     pub origin: Option<Origin>,
@@ -135,7 +141,7 @@ pub struct ImportItemResult {
     /// 失败分类，供前端分支处理。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_code: Option<String>,
-    /// AI 建议（仅当导入时勾选了"导入后立即 AI 分析"且 AI 可用）。
+    /// AI 建议（仅当导入启用了 AI 分析且 AI 可用）。
     /// 依然是建议：前端须填入输入框，用户确认后才落库。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ai_suggestion: Option<AiSuggestion>,

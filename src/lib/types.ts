@@ -63,6 +63,8 @@ export interface ImportRequest {
   targetDir?: string | null;
   placement?: PlacementMode | null;
   analyzeAfter: boolean;
+  category?: string | null;
+  note?: string | null;
   origin?: Origin | null;
 }
 
@@ -72,6 +74,7 @@ export interface ImportItemResult {
   existingCardId?: string;
   error?: string;
   errorCode?: string;
+  aiSuggestion?: AiSuggestion;
 }
 
 export interface ImportResult {

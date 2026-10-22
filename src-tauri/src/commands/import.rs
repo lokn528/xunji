@@ -16,6 +16,23 @@ use crate::models::{
 };
 use crate::state::AppState;
 
+/// 本批导入统一应用的卡片元数据。
+#[derive(Debug, Clone, Copy, Default)]
+struct ImportCardOptions<'a> {
+    category: Option<&'a str>,
+    note: Option<&'a str>,
+}
+
+impl<'a> ImportCardOptions<'a> {
+    fn category_name(self) -> Option<&'a str> {
+        self.category.map(str::trim).filter(|name| !name.is_empty())
+    }
+
+    fn note_text(self) -> &'a str {
+        self.note.map(str::trim).unwrap_or_default()
+    }
+}
+
 /// 导入一组路径。
 #[tauri::command]
 pub async fn import_paths(
@@ -39,6 +56,10 @@ pub async fn import_paths(
     });
 
     let placement = effective_placement(placement, &target_dir, origin);
+    let card_options = ImportCardOptions {
+        category: request.category.as_deref(),
+        note: request.note.as_deref(),
+    };
 
     let mut result = ImportResult {
         items: Vec::new(),
@@ -48,13 +69,8 @@ pub async fn import_paths(
     };
 
     for source in &request.paths {
-        let item = import_one(
-            &state,
-            source,
-            &target_dir,
-            placement,
-            origin,
-        );
+        let item =
+            import_one_with_options(&state, source, &target_dir, placement, origin, card_options);
         match &item {
             Ok(r) if r.existing_card_id.is_some() => result.duplicates += 1,
             Ok(_) => result.succeeded += 1,
@@ -88,9 +104,7 @@ fn effective_placement(
     target_dir: &str,
     origin: Origin,
 ) -> PlacementMode {
-    if requested == PlacementMode::Move
-        && target_dir.trim().is_empty()
-        && origin == Origin::SentTo
+    if requested == PlacementMode::Move && target_dir.trim().is_empty() && origin == Origin::SentTo
     {
         PlacementMode::Keep
     } else {
@@ -101,12 +115,32 @@ fn effective_placement(
 /// 导入单个源路径。
 ///
 /// 返回 `Ok` 且 `existing_card_id` 非空表示"已收录"。
+#[cfg(test)]
 fn import_one(
     state: &AppState,
     source: &str,
     target_dir: &str,
     placement: PlacementMode,
     origin: Origin,
+) -> AppResult<ImportItemResult> {
+    import_one_with_options(
+        state,
+        source,
+        target_dir,
+        placement,
+        origin,
+        ImportCardOptions::default(),
+    )
+}
+
+/// 导入单个源路径，并应用本批次的分类与备注。
+fn import_one_with_options(
+    state: &AppState,
+    source: &str,
+    target_dir: &str,
+    placement: PlacementMode,
+    origin: Origin,
+    options: ImportCardOptions<'_>,
 ) -> AppResult<ImportItemResult> {
     let abs_source = fsops::to_absolute(source);
     let source_path = Path::new(&abs_source);
@@ -171,16 +205,18 @@ fn import_one(
 
     // 建卡。失败则回滚落盘，不留孤儿文件。
     let card = build_card(&abs_source, &final_path, origin, is_dir);
-    let thumb = state
-        .thumb_dir()
-        .to_string_lossy()
-        .to_string();
-    let thumb_path = crate::thumb::generate(&final_path, &thumb)
-        .map(|p| p.to_string_lossy().to_string());
+    let thumb = state.thumb_dir().to_string_lossy().to_string();
+    let thumb_path =
+        crate::thumb::generate(&final_path, &thumb).map(|p| p.to_string_lossy().to_string());
     let mut card = card;
     card.thumb_path = thumb_path;
 
     let insert = state.with_db(|conn| {
+        if let Some(name) = options.category_name() {
+            card.category_id = Some(db::ensure_category(conn, name)?);
+        }
+        card.summary = options.note_text().to_string();
+        card.needs_summary = card.summary.is_empty();
         db::insert_card(conn, &card)?;
         Ok(())
     });
@@ -241,10 +277,7 @@ fn build_card(source: &str, final_path: &str, origin: Origin, is_dir: bool) -> C
 }
 
 /// 把内部结果转成对外结构，并把错误转成可读文案。
-fn item_to_result(
-    source: &str,
-    outcome: AppResult<ImportItemResult>,
-) -> ImportItemResult {
+fn item_to_result(source: &str, outcome: AppResult<ImportItemResult>) -> ImportItemResult {
     match outcome {
         Ok(r) => r,
         Err(e) => {
@@ -336,7 +369,96 @@ mod tests {
         let cards = state.with_db(db::list_cards).unwrap();
         assert_eq!(cards.len(), 1);
         assert!(cards[0].needs_summary, "说明应标记待写");
-        assert_eq!(cards[0].file_path, dst_dir.join("note.txt").to_string_lossy());
+        assert_eq!(
+            cards[0].file_path,
+            dst_dir.join("note.txt").to_string_lossy()
+        );
+    }
+
+    #[test]
+    fn 导入时可写入备注并自动创建分类() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("note.txt");
+        std::fs::write(&src, "hello").unwrap();
+        let state = make_state(dir.path());
+
+        import_one_with_options(
+            &state,
+            src.to_str().unwrap(),
+            dir.path().to_str().unwrap(),
+            PlacementMode::Keep,
+            Origin::ImportedKept,
+            ImportCardOptions {
+                category: Some("项目资料"),
+                note: Some("  甲方确认版  "),
+            },
+        )
+        .unwrap();
+
+        let cards = state.with_db(db::list_cards).unwrap();
+        assert_eq!(cards[0].summary, "甲方确认版");
+        assert!(!cards[0].needs_summary, "手写备注应清除待写标记");
+
+        let categories = state.with_db(db::list_categories).unwrap();
+        assert_eq!(categories.len(), 1);
+        assert_eq!(
+            cards[0].category_id.as_deref(),
+            Some(categories[0].id.as_str())
+        );
+    }
+
+    #[test]
+    fn 导入时空备注仍标记待写() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("note.txt");
+        std::fs::write(&src, "hello").unwrap();
+        let state = make_state(dir.path());
+
+        import_one_with_options(
+            &state,
+            src.to_str().unwrap(),
+            dir.path().to_str().unwrap(),
+            PlacementMode::Keep,
+            Origin::ImportedKept,
+            ImportCardOptions {
+                category: None,
+                note: Some("   "),
+            },
+        )
+        .unwrap();
+
+        let cards = state.with_db(db::list_cards).unwrap();
+        assert_eq!(cards[0].summary, "");
+        assert!(cards[0].needs_summary);
+    }
+
+    #[test]
+    fn 导入时复用已有分类() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("note.txt");
+        std::fs::write(&src, "hello").unwrap();
+        let state = make_state(dir.path());
+        let existing = state
+            .with_db(|conn| db::create_category(conn, "参考资料"))
+            .unwrap();
+
+        import_one_with_options(
+            &state,
+            src.to_str().unwrap(),
+            dir.path().to_str().unwrap(),
+            PlacementMode::Keep,
+            Origin::ImportedKept,
+            ImportCardOptions {
+                category: Some("参考资料"),
+                note: None,
+            },
+        )
+        .unwrap();
+
+        let categories = state.with_db(db::list_categories).unwrap();
+        let cards = state.with_db(db::list_cards).unwrap();
+        assert_eq!(categories.len(), 1, "不应重复创建同名分类");
+        assert_eq!(cards[0].category_id.as_deref(), Some(existing.id.as_str()));
     }
 
     #[test]
@@ -449,7 +571,11 @@ mod tests {
         .unwrap_err();
 
         assert!(matches!(err, AppError::Io(_)), "应报文件操作失败");
-        assert_eq!(state.with_db(db::list_cards).unwrap().len(), 0, "不应留下卡片");
+        assert_eq!(
+            state.with_db(db::list_cards).unwrap().len(),
+            0,
+            "不应留下卡片"
+        );
     }
 
     #[test]
@@ -544,7 +670,15 @@ mod tests {
 
         let children = folder_children(root.to_str().unwrap().to_string()).unwrap();
         assert_eq!(children.len(), 2);
-        assert!(children.iter().any(|c| c.relative_path == "a.txt" && !c.is_dir));
-        assert!(children.iter().any(|c| c.relative_path == "sub" && c.is_dir));
+        assert!(
+            children
+                .iter()
+                .any(|c| c.relative_path == "a.txt" && !c.is_dir)
+        );
+        assert!(
+            children
+                .iter()
+                .any(|c| c.relative_path == "sub" && c.is_dir)
+        );
     }
 }

@@ -83,7 +83,9 @@ function Shell() {
           {page === "import" && (
             <ImportPage
               settings={settings}
+              categories={categories}
               onSettingsChange={setSettings}
+              onCategoriesChange={setCategories}
               onImported={reload}
               pendingPaths={pendingPaths}
               onPendingDone={() => setPendingPaths(null)}

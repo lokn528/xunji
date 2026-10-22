@@ -1,19 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { Check, Plus, Sparkles, X } from "lucide-react";
 import { api } from "../lib/ipc";
-import type { ImportResult, Origin, Settings } from "../lib/types";
+import type { Category, ImportResult, Origin, Settings } from "../lib/types";
 import { errorText } from "../lib/types";
 import { useToast } from "../components/Toast";
 
 export default function ImportPage({
   settings,
+  categories,
   onSettingsChange,
+  onCategoriesChange,
   onImported,
   pendingPaths,
   onPendingDone,
 }: {
   settings: Settings | null;
+  categories: Category[];
   onSettingsChange: (s: Settings) => void;
+  onCategoriesChange: (categories: Category[]) => void;
   onImported: () => void;
   /** 启动时收到的待导入路径（右键「发送到 循迹」）。 */
   pendingPaths: string[] | null;
@@ -27,6 +32,11 @@ export default function ImportPage({
   const [useTempDir, setUseTempDir] = useState(false);
   const [analyzeAfter, setAnalyzeAfter] = useState(false);
   const [placement, setPlacement] = useState<"move" | "keep">("move");
+  const [categoryName, setCategoryName] = useState("");
+  const [note, setNote] = useState("");
+  const [showCategoryCreator, setShowCategoryCreator] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [categoryBusy, setCategoryBusy] = useState(false);
   const dragDepth = useRef(0);
 
   useEffect(() => {
@@ -45,9 +55,12 @@ export default function ImportPage({
         targetDir: useTempDir && targetDir.trim() ? targetDir : null,
         placement,
         analyzeAfter,
+        category: categoryName || null,
+        note: note || null,
         origin: origin ?? null,
       });
       setReport(result);
+      if (result.succeeded > 0) setNote("");
 
       if (result.failed > 0) {
         const firstError = result.items.find((i) => i.error)?.error;
@@ -139,6 +152,27 @@ export default function ImportPage({
     }
   };
 
+  const createCategory = async () => {
+    const name = newCategoryName.trim();
+    if (!name) return;
+    setCategoryBusy(true);
+    try {
+      const created = await api.createCategory(name);
+      const next = [...categories, created].sort((a, b) =>
+        a.name.localeCompare(b.name, "zh-CN"),
+      );
+      onCategoriesChange(next);
+      setCategoryName(created.name);
+      setNewCategoryName("");
+      setShowCategoryCreator(false);
+      toast.ok("分类已建好", created.name);
+    } catch (e) {
+      toast.err("新建分类失败", errorText(e));
+    } finally {
+      setCategoryBusy(false);
+    }
+  };
+
   return (
     <>
       <div className="page-head page-head-solo">
@@ -175,54 +209,135 @@ export default function ImportPage({
         </div>
       </div>
 
-      <div className="import-bar">
-        <label className="field">
-          <span>这次放到哪</span>
-          <div className="row">
-            <input
-              className="input mono"
-              value={targetDir}
-              onChange={(e) => {
-                setTargetDir(e.target.value);
-                setUseTempDir(true);
-              }}
-              placeholder="默认存储位置（到设置里改）"
+      <div className="import-settings">
+        <div className="import-settings-grid">
+          <label className="field import-location">
+            <span>这次放到哪</span>
+            <div className="row">
+              <input
+                className="input mono"
+                value={targetDir}
+                onChange={(e) => {
+                  setTargetDir(e.target.value);
+                  setUseTempDir(true);
+                }}
+                placeholder="默认存储位置（到设置里改）"
+              />
+              <button className="btn" onClick={chooseTargetDir} type="button">
+                选目录
+              </button>
+            </div>
+          </label>
+
+          <label className="field">
+            <span>落点方式</span>
+            <select
+              className="select"
+              value={placement}
+              onChange={(e) => setPlacement(e.target.value as "move" | "keep")}
+            >
+              <option value="move">移动/复制到目标位置</option>
+              <option value="keep">仅登记，原地不动</option>
+            </select>
+          </label>
+
+          <label className="field">
+            <span>分类</span>
+            <div className="row category-picker">
+              <select
+                className="select"
+                value={categoryName}
+                onChange={(e) => setCategoryName(e.target.value)}
+              >
+                <option value="">未分类</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.name}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="btn btn-sm"
+                type="button"
+                onClick={() => setShowCategoryCreator((shown) => !shown)}
+                disabled={categoryBusy || busy}
+                aria-expanded={showCategoryCreator}
+              >
+                <Plus size={14} />
+                新建
+              </button>
+            </div>
+          </label>
+
+          <label className="field import-note">
+            <span>备注说明</span>
+            <textarea
+              className="textarea"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="可留空，之后也能补充"
+              rows={2}
             />
-            <button className="btn" onClick={chooseTargetDir}>
-              选目录
+          </label>
+        </div>
+
+        {showCategoryCreator && (
+          <div className="category-creator">
+            <Plus size={16} aria-hidden="true" />
+            <input
+              className="input"
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void createCategory();
+                }
+                if (e.key === "Escape") setShowCategoryCreator(false);
+              }}
+              placeholder="输入新分类名称"
+              autoFocus
+            />
+            <button
+              className="btn btn-sm"
+              type="button"
+              onClick={createCategory}
+              disabled={!newCategoryName.trim() || categoryBusy}
+            >
+              <Check size={14} />
+              创建
+            </button>
+            <button
+              className="btn-icon"
+              type="button"
+              onClick={() => {
+                setShowCategoryCreator(false);
+                setNewCategoryName("");
+              }}
+              aria-label="取消新建分类"
+              title="取消"
+            >
+              <X size={15} />
             </button>
           </div>
-        </label>
+        )}
 
-        <label className="field" style={{ flex: "0 0 auto" }}>
-          <span>落点方式</span>
-          <select
-            className="select"
-            value={placement}
-            onChange={(e) => setPlacement(e.target.value as "move" | "keep")}
+        <div className="import-actions">
+          {useTempDir && (
+            <button className="btn btn-sm" onClick={saveAsDefault} type="button">
+              存为默认
+            </button>
+          )}
+          <button
+            className="btn ai-toggle"
+            type="button"
+            aria-pressed={analyzeAfter}
+            onClick={() => setAnalyzeAfter((enabled) => !enabled)}
+            title="导入时自动生成说明与分类建议"
           >
-            <option value="move">移动/复制到目标位置</option>
-            <option value="keep">仅登记，原地不动</option>
-          </select>
-        </label>
-
-        <div className="field" style={{ flex: "0 0 auto" }}>
-          <span>&nbsp;</span>
-          <div className="row">
-            <label className="switch-row" style={{ padding: 0 }}>
-              <input
-                type="checkbox"
-                checked={analyzeAfter}
-                onChange={(e) => setAnalyzeAfter(e.target.checked)}
-              />
-              <span>导入后立即 AI 分析</span>
-            </label>
-            {useTempDir && (
-              <button className="btn btn-sm" onClick={saveAsDefault}>
-                存为默认
-              </button>
-            )}
-          </div>
+            <Sparkles size={15} />
+            {analyzeAfter ? "AI 分析已开" : "AI 分析"}
+          </button>
         </div>
       </div>
 
