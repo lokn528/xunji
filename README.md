@@ -16,9 +16,19 @@
 
 | 想做什么 | 怎么做 |
 |---|---|
-| 直接用 | 运行 `src-tauri\target\release\xunji.exe` |
-| 装到系统里 | 跑 `src-tauri\target\release\bundle\` 下的 MSI 或 NSIS 安装程序 |
+| 直接用 | 运行 `src-tauri\target\release\xunji.exe`（免安装，绿色运行） |
+| 装到系统里 | 跑 `src-tauri\target\release\bundle\` 下的 MSI 或 NSIS 安装程序，装到 `%LOCALAPPDATA%\循迹\` |
 | 开发调试 | 在项目目录执行 `npm run tauri dev` |
+
+安装后：开始菜单有「循迹」快捷方式，卸载走「设置 → 应用 → 卸载」或
+`%LOCALAPPDATA%\循迹\uninstall.exe`。
+
+右键菜单用这个脚本注册/注销（指向哪个 exe 就注册哪个）：
+
+```powershell
+.\scripts\register-shell-menu.ps1 -ExePath "$env:LOCALAPPDATA\循迹\xunji.exe"
+.\scripts\register-shell-menu.ps1 -Uninstall
+```
 
 ## 特性
 

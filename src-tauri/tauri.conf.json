@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "xunji",
+  "productName": "循迹",
   "version": "0.1.0",
   "identifier": "app.xunji.desktop",
   "build": {
@@ -28,6 +28,9 @@
     "active": true,
     "targets": "all",
     "windows": {
+      "wix": {
+        "language": "zh-CN"
+      },
       "nsis": {
         "languages": ["SimpChinese", "English"],
         "displayLanguageSelector": false
