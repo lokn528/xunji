@@ -296,6 +296,9 @@ export default function SettingsPage({
             value={temperature}
             onChange={(e) => setTemperature(Number(e.target.value))}
           />
+          <span className="hint">
+            控制 AI 的随机性：越低越稳定，越高越发散；资料整理建议保持 0.2～0.4。
+          </span>
         </label>
 
         <div className="switch-row">
