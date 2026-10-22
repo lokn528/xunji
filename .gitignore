@@ -37,3 +37,6 @@ dist-ssr
 # Rust / Tauri
 src-tauri/target/
 src-tauri/gen/schemas
+
+# Local UI screenshots used for visual self-checks
+.shots/

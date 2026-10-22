@@ -84,7 +84,17 @@ public class Win {
         if ($hwnd -ne [IntPtr]::Zero) { break }
     }
     if ($hwnd -eq [IntPtr]::Zero) { throw "找不到标题含「$WindowTitle」的窗口" }
-    [void][Win]::ShowWindow($hwnd, 9)   # SW_RESTORE
+    # 保持当前显示状态：最大化时不要再 SW_RESTORE，否则会把窗口还原，
+    # 截图里就看不到"最大化后按钮变还原图标"这个状态了。
+    Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class Zed {
+  [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr h);
+}
+"@
+    if ([Zed]::IsZoomed($hwnd)) { [void][Win]::ShowWindow($hwnd, 3) }   # SW_MAXIMIZE
+    else { [void][Win]::ShowWindow($hwnd, 9) }                            # SW_RESTORE
     [void][Win]::SetForegroundWindow($hwnd)
     Start-Sleep -Milliseconds 700
     $r = New-Object Win+RECT

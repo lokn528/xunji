@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import Sidebar from "./components/Sidebar";
 import type { PageKey } from "./components/Sidebar";
+import TitleBar from "./components/TitleBar";
 import SummaryEditor from "./components/SummaryEditor";
 import { ToastProvider, useToast } from "./components/Toast";
 import ImportPage from "./pages/ImportPage";
@@ -76,40 +77,43 @@ function Shell() {
   return (
     <div className="app">
       <Sidebar page={page} onNavigate={setPage} cardCount={cards.length} />
-      <main className="main">
-        {page === "import" && (
-          <ImportPage
-            settings={settings}
-            onSettingsChange={setSettings}
-            onImported={reload}
-            pendingPaths={pendingPaths}
-            onPendingDone={() => setPendingPaths(null)}
-          />
-        )}
+      <div className="content">
+        <TitleBar />
+        <main className="main">
+          {page === "import" && (
+            <ImportPage
+              settings={settings}
+              onSettingsChange={setSettings}
+              onImported={reload}
+              pendingPaths={pendingPaths}
+              onPendingDone={() => setPendingPaths(null)}
+            />
+          )}
 
-        {page === "timeline" && (
-          <TimelinePage
-            cards={cards}
-            categories={categories}
-            onOpenSummary={setEditing}
-            onChanged={onChanged}
-            onRelink={relink}
-          />
-        )}
+          {page === "timeline" && (
+            <TimelinePage
+              cards={cards}
+              categories={categories}
+              onOpenSummary={setEditing}
+              onChanged={onChanged}
+              onRelink={relink}
+            />
+          )}
 
-        {page === "category" && (
-          <CategoryPage
-            cards={cards}
-            categories={categories}
-            onChanged={onChanged}
-            onOpenCard={setEditing}
-          />
-        )}
+          {page === "category" && (
+            <CategoryPage
+              cards={cards}
+              categories={categories}
+              onChanged={onChanged}
+              onOpenCard={setEditing}
+            />
+          )}
 
-        {page === "settings" && (
-          <SettingsPage settings={settings} onSettingsChange={setSettings} />
-        )}
-      </main>
+          {page === "settings" && (
+            <SettingsPage settings={settings} onSettingsChange={setSettings} />
+          )}
+        </main>
+      </div>
 
       {editing && (
         <SummaryEditor

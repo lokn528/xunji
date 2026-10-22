@@ -18,7 +18,8 @@ export default function Sidebar({
 }) {
   return (
     <aside className="sidebar">
-      <div className="brand">
+      {/* 左上角品牌区也是窗口拖拽区（无边框窗口没有原生标题栏可拖）。 */}
+      <div className="brand" data-tauri-drag-region="deep">
         <h1>循迹</h1>
         <p>所有丢过的东西，有迹可循</p>
       </div>

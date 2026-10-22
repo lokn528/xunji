@@ -46,6 +46,9 @@
   --radius: 14px;
   --radius-sm: 10px;
   --sidebar-w: 176px;
+  /* 自绘标题栏高度。Windows 上原生标题栏去不掉（titleBarStyle 只对 macOS 生效），
+     所以窗口无边框起，这条由前端画；它透明地坐在夜景背景上，不产生横向色块。 */
+  --titlebar-h: 44px;
 
   --font: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
   --font-mono: "Cascadia Code", "JetBrains Mono", Consolas, "Courier New", monospace;
@@ -127,17 +130,102 @@ button {
 /* ---------------------------------------------------------- 应用骨架 */
 
 .app {
+  position: relative;
   display: grid;
   grid-template-columns: var(--sidebar-w) 1fr;
   height: 100%;
   overflow: hidden;
 }
 
+/* 右列：自绘标题栏 + 可滚动内容 */
+.content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* 自绘标题栏：整条完全透明，和应用背景连成一片；
+   只有右侧的窗口按钮是独立的小玻璃块。 */
+.titlebar {
+  flex: none;
+  height: var(--titlebar-h);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 14px;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.win-btns {
+  display: flex;
+  gap: 8px;
+}
+
+/* 窗口按钮：无色玻璃小方块，hover 时边框提亮 */
+.win-btn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--glass-line);
+  border-radius: 9px;
+  background: var(--glass-1);
+  backdrop-filter: blur(var(--blur)) saturate(var(--saturate));
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(var(--saturate));
+  color: var(--tx-2);
+  overflow: hidden;
+  box-shadow: var(--sh-soft);
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease),
+    border-color var(--dur) var(--ease), transform var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
+}
+
+/* 扫光高光层 */
+.win-btn::after {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: 0;
+  width: 45%;
+  height: 200%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.18), transparent);
+  transform: translateX(-150%) skewX(-20deg);
+  transition: transform 700ms var(--ease);
+  pointer-events: none;
+}
+
+.win-btn:hover {
+  color: var(--tx-1);
+  background: var(--glass-3);
+  border-color: var(--glass-line-hi);
+  transform: translateY(-1px);
+}
+
+.win-btn:hover::after {
+  transform: translateX(250%) skewX(-20deg);
+}
+
+.win-btn:active {
+  transform: scale(0.97);
+}
+
+/* 关闭按钮 hover 用香槟金提示，不引入第二种强调色 */
+.win-btn-close:hover {
+  color: var(--gold-soft);
+  background: rgba(228, 184, 99, 0.15);
+  border-color: rgba(228, 184, 99, 0.4);
+}
+
 .sidebar {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  padding: 20px 12px;
+  padding: 16px 12px 20px;
   overflow: hidden;
   border-right: 1px solid var(--glass-line);
   background: var(--glass-1);
@@ -145,6 +233,7 @@ button {
   -webkit-backdrop-filter: blur(var(--blur)) saturate(var(--saturate));
 }
 
+/* 品牌区同时是窗口拖拽区（无边框窗口没有原生标题栏可拖） */
 .brand {
   padding: 0 8px;
 }
@@ -153,6 +242,7 @@ button {
   margin: 0;
   font-size: 21px;
   font-weight: 600;
+  line-height: 1.2;
   letter-spacing: 0.1em;
   color: var(--tx-1);
 }
@@ -240,7 +330,7 @@ button {
 .main {
   min-width: 0;
   overflow-y: auto;
-  padding: 28px 32px 64px;
+  padding: 16px 32px 64px;
 }
 
 .page-head {
