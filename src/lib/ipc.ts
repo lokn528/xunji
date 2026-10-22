@@ -48,6 +48,8 @@ export const api = {
     invoke<ImportResult>("import_paths", { request }),
   folderChildren: (path: string) =>
     invoke<FolderChild[]>("folder_children", { path }),
+  /** 取走启动时收到的待导入路径（右键「发送到 循迹」传入）。 */
+  takePendingImports: () => invoke<string[]>("take_pending_imports"),
 
   // ---- 设置 ----
   getSettings: () => invoke<Settings>("get_settings"),

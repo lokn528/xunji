@@ -19,6 +19,7 @@ function Shell() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [editing, setEditing] = useState<Card | null>(null);
+  const [pendingPaths, setPendingPaths] = useState<string[] | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -38,6 +39,19 @@ function Shell() {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  // 右键「发送到 循迹」启动时带了文件路径，这里取出来交给导入页处理。
+  useEffect(() => {
+    api
+      .takePendingImports()
+      .then((paths) => {
+        if (paths.length > 0) {
+          setPendingPaths(paths);
+          setPage("import");
+        }
+      })
+      .catch(() => undefined);
+  }, []);
 
   const onChanged = (updated: Card) => {
     setCards((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
@@ -68,6 +82,8 @@ function Shell() {
             settings={settings}
             onSettingsChange={setSettings}
             onImported={reload}
+            pendingPaths={pendingPaths}
+            onPendingDone={() => setPendingPaths(null)}
           />
         )}
 

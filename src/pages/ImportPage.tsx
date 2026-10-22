@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { api } from "../lib/ipc";
-import type { ImportResult, Settings } from "../lib/types";
+import type { ImportResult, Origin, Settings } from "../lib/types";
 import { errorText } from "../lib/types";
 import { useToast } from "../components/Toast";
 
@@ -9,10 +9,15 @@ export default function ImportPage({
   settings,
   onSettingsChange,
   onImported,
+  pendingPaths,
+  onPendingDone,
 }: {
   settings: Settings | null;
   onSettingsChange: (s: Settings) => void;
   onImported: () => void;
+  /** 启动时收到的待导入路径（右键「发送到 循迹」）。 */
+  pendingPaths: string[] | null;
+  onPendingDone: () => void;
 }) {
   const toast = useToast();
   const [over, setOver] = useState(false);
@@ -31,7 +36,7 @@ export default function ImportPage({
     }
   }, [settings]);
 
-  const doImport = async (paths: string[]) => {
+  const doImport = async (paths: string[], origin?: Origin) => {
     if (paths.length === 0) return;
     setBusy(true);
     try {
@@ -40,6 +45,7 @@ export default function ImportPage({
         targetDir: useTempDir && targetDir.trim() ? targetDir : null,
         placement,
         analyzeAfter,
+        origin: origin ?? null,
       });
       setReport(result);
 
@@ -58,6 +64,16 @@ export default function ImportPage({
       setBusy(false);
     }
   };
+
+  // 启动时收到待导入路径（右键「发送到 循迹」）→ 自动导入一次。
+  useEffect(() => {
+    if (!pendingPaths || pendingPaths.length === 0) return;
+    const paths = pendingPaths;
+    onPendingDone();
+    void doImport(paths, "sent_to");
+    // 只在拿到待导入路径时触发一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingPaths]);
 
   const onDrop = async (e: React.DragEvent) => {
     e.preventDefault();

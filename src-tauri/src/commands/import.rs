@@ -38,6 +38,8 @@ pub async fn import_paths(
         PlacementMode::Move => Origin::ImportedMoved,
     });
 
+    let placement = effective_placement(placement, &target_dir, origin);
+
     let mut result = ImportResult {
         items: Vec::new(),
         succeeded: 0,
@@ -74,6 +76,26 @@ pub async fn import_paths(
     }
 
     Ok(result)
+}
+
+/// 解析本次导入实际使用的落点方式。
+///
+/// 右键「发送到 循迹」是无人值守的：没配默认存储位置时如果直接报错，用户会
+/// 以为右键功能坏了。退回「仅登记」——文件留在原处，卡片照建。交互式导入
+/// （拖拽 / 选文件）保持原样，之后会明确报错让人去设置里选位置。
+fn effective_placement(
+    requested: PlacementMode,
+    target_dir: &str,
+    origin: Origin,
+) -> PlacementMode {
+    if requested == PlacementMode::Move
+        && target_dir.trim().is_empty()
+        && origin == Origin::SentTo
+    {
+        PlacementMode::Keep
+    } else {
+        requested
+    }
 }
 
 /// 导入单个源路径。
@@ -268,18 +290,23 @@ pub fn folder_children(path: String) -> AppResult<Vec<FolderChild>> {
     Ok(out)
 }
 
+/// 取走启动时收到的待导入路径。
+///
+/// 右键「发送到 循迹」会把选中的路径作为命令行参数传给应用；前端启动后调用
+/// 一次即可把它们导入。取走即清空，避免重复导入。
+#[tauri::command]
+pub fn take_pending_imports(state: State<'_, AppState>) -> Vec<String> {
+    state.take_pending_imports()
+}
+
 // ----------------------------------------------------------------- 测试
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
 
     fn make_state(dir: &Path) -> AppState {
-        AppState {
-            db: Mutex::new(db::open_in_memory().unwrap()),
-            data_dir: dir.to_path_buf(),
-        }
+        AppState::new(db::open_in_memory().unwrap(), dir.to_path_buf())
     }
 
     #[test]
@@ -472,6 +499,39 @@ mod tests {
 
         let cards = state.with_db(db::list_cards).unwrap();
         assert!(!cards[0].is_dir, "普通文件不应标记 is_dir");
+    }
+
+    #[test]
+    fn 右键导入没配存储位置时退回仅登记() {
+        // 无人值守：不能报错，否则右键功能看起来是坏的
+        assert_eq!(
+            effective_placement(PlacementMode::Move, "", Origin::SentTo),
+            PlacementMode::Keep
+        );
+    }
+
+    #[test]
+    fn 交互式导入没配存储位置时保持移动模式以便报错() {
+        assert_eq!(
+            effective_placement(PlacementMode::Move, "", Origin::ImportedMoved),
+            PlacementMode::Move
+        );
+        assert_eq!(
+            effective_placement(PlacementMode::Move, "", Origin::ImportedKept),
+            PlacementMode::Move
+        );
+    }
+
+    #[test]
+    fn 配了存储位置就按设置走() {
+        assert_eq!(
+            effective_placement(PlacementMode::Move, r"D:\循迹库", Origin::SentTo),
+            PlacementMode::Move
+        );
+        assert_eq!(
+            effective_placement(PlacementMode::Keep, r"D:\循迹库", Origin::SentTo),
+            PlacementMode::Keep
+        );
     }
 
     #[test]

@@ -14,8 +14,6 @@ mod state;
 mod textprobe;
 mod thumb;
 
-use std::sync::Mutex;
-
 use tauri::Manager;
 
 use crate::state::AppState;
@@ -38,10 +36,10 @@ pub fn run() {
             std::fs::create_dir_all(&data_dir)?;
 
             let conn = db::open(&data_dir.join("xunji.db"))?;
-            app.manage(AppState {
-                db: Mutex::new(conn),
-                data_dir,
-            });
+            let state = AppState::new(conn, data_dir);
+            // 右键「发送到 循迹」会把选中的文件路径作为命令行参数传进来。
+            state.set_pending_imports(pending_import_paths());
+            app.manage(state);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -74,6 +72,7 @@ pub fn run() {
             shellmenu::install_shell_menu,
             shellmenu::uninstall_shell_menu,
             shellmenu::shell_menu_installed,
+            commands::import::take_pending_imports,
         ])
         .run(tauri::generate_context!())
         .expect("启动循迹失败");
