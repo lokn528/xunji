@@ -21,6 +21,7 @@ function Shell() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [editing, setEditing] = useState<Card | null>(null);
   const [pendingPaths, setPendingPaths] = useState<string[] | null>(null);
+  const [autoAi, setAutoAi] = useState(false);
 
   const reload = useCallback(async () => {
     try {
@@ -89,6 +90,9 @@ function Shell() {
               onImported={reload}
               pendingPaths={pendingPaths}
               onPendingDone={() => setPendingPaths(null)}
+              autoAi={autoAi}
+              onAutoAiChange={setAutoAi}
+              onNavigateSettings={() => setPage("settings")}
             />
           )}
 

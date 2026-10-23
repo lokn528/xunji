@@ -1,10 +1,40 @@
 import { useEffect, useRef, useState } from "react";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Check, Plus, Sparkles, X } from "lucide-react";
+import {
+  Check,
+  File,
+  FolderOpen,
+  Plus,
+  Sparkles,
+  Trash2,
+  X,
+} from "lucide-react";
 import { api } from "../lib/ipc";
 import type { Category, ImportResult, Origin, Settings } from "../lib/types";
 import { errorText } from "../lib/types";
 import { useToast } from "../components/Toast";
+import Switch from "../components/Switch";
+
+function pathKey(path: string): string {
+  return path.replace(/\//g, "\\").toLowerCase();
+}
+
+function fileName(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+}
+
+function mergePaths(current: string[], incoming: string[]): string[] {
+  const seen = new Set(current.map(pathKey));
+  const next = [...current];
+  for (const path of incoming) {
+    const key = pathKey(path);
+    if (!path.trim() || seen.has(key)) continue;
+    seen.add(key);
+    next.push(path);
+  }
+  return next;
+}
 
 export default function ImportPage({
   settings,
@@ -14,6 +44,9 @@ export default function ImportPage({
   onImported,
   pendingPaths,
   onPendingDone,
+  autoAi,
+  onAutoAiChange,
+  onNavigateSettings,
 }: {
   settings: Settings | null;
   categories: Category[];
@@ -23,21 +56,36 @@ export default function ImportPage({
   /** 启动时收到的待导入路径（右键「发送到 循迹」）。 */
   pendingPaths: string[] | null;
   onPendingDone: () => void;
+  autoAi: boolean;
+  onAutoAiChange: (enabled: boolean) => void;
+  onNavigateSettings: () => void;
 }) {
   const toast = useToast();
   const [over, setOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [report, setReport] = useState<ImportResult | null>(null);
+  const [stagedPaths, setStagedPaths] = useState<string[]>([]);
   const [targetDir, setTargetDir] = useState("");
   const [useTempDir, setUseTempDir] = useState(false);
-  const [analyzeAfter, setAnalyzeAfter] = useState(false);
   const [placement, setPlacement] = useState<"move" | "keep">("move");
   const [categoryName, setCategoryName] = useState("");
   const [note, setNote] = useState("");
   const [showCategoryCreator, setShowCategoryCreator] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [categoryBusy, setCategoryBusy] = useState(false);
-  const dragDepth = useRef(0);
+  const [keyPresent, setKeyPresent] = useState<boolean | null>(null);
+  const [aiFilling, setAiFilling] = useState(false);
+  const [showAiSetup, setShowAiSetup] = useState(false);
+  const latestStagePaths = useRef<(paths: string[]) => void>(() => undefined);
+
+  const aiConfigured =
+    settings && keyPresent !== null
+      ? Boolean(
+          keyPresent &&
+            settings.aiBaseUrl.trim() &&
+            settings.aiModel.trim(),
+        )
+      : null;
 
   useEffect(() => {
     if (settings) {
@@ -45,6 +93,59 @@ export default function ImportPage({
       setPlacement(settings.placementMode);
     }
   }, [settings]);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .hasApiKey()
+      .then((present) => {
+        if (alive) setKeyPresent(present);
+      })
+      .catch(() => {
+        if (alive) setKeyPresent(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (autoAi && aiConfigured === false) onAutoAiChange(false);
+  }, [autoAi, aiConfigured, onAutoAiChange]);
+
+  const fillWithAi = async (paths: string[], automatic = false) => {
+    if (paths.length === 0) return;
+    if (aiConfigured !== true) {
+      setShowAiSetup(true);
+      return;
+    }
+
+    setAiFilling(true);
+    try {
+      const suggestion = await api.analyzePath(paths[0]);
+      setNote(suggestion.summary);
+      if (suggestion.suggestedCategory) {
+        setCategoryName(suggestion.suggestedCategory);
+      }
+      toast.ok(
+        automatic ? "AI 已自动填充" : "AI 已填好分类与备注",
+        paths.length > 1 ? "按第一个文件生成，可在导入前继续修改" : undefined,
+      );
+    } catch (e) {
+      toast.err("AI 填充失败，可手动填写", errorText(e));
+    } finally {
+      setAiFilling(false);
+    }
+  };
+
+  const stagePaths = (paths: string[]) => {
+    const next = mergePaths(stagedPaths, paths);
+    setStagedPaths(next);
+    if (autoAi && aiConfigured === true && next.length > 0) {
+      void fillWithAi(next, true);
+    }
+  };
+  latestStagePaths.current = stagePaths;
 
   const doImport = async (paths: string[], origin?: Origin) => {
     if (paths.length === 0) return;
@@ -54,16 +155,19 @@ export default function ImportPage({
         paths,
         targetDir: useTempDir && targetDir.trim() ? targetDir : null,
         placement,
-        analyzeAfter,
+        analyzeAfter: false,
         category: categoryName || null,
         note: note || null,
         origin: origin ?? null,
       });
       setReport(result);
+      setStagedPaths(
+        result.items.filter((item) => item.error).map((item) => item.sourcePath),
+      );
       if (result.succeeded > 0) setNote("");
 
       if (result.failed > 0) {
-        const firstError = result.items.find((i) => i.error)?.error;
+        const firstError = result.items.find((item) => item.error)?.error;
         toast.err(`${result.failed} 个没能收录`, firstError);
       } else if (result.duplicates > 0) {
         toast.ok(`收录 ${result.succeeded} 个，${result.duplicates} 个已收录过`);
@@ -78,6 +182,37 @@ export default function ImportPage({
     }
   };
 
+  // Tauri 会接管 Windows 的原生文件拖放，因此必须监听 WebView 事件，
+  // 不能依赖浏览器 DataTransfer.files。
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+
+    void getCurrentWebview()
+      .onDragDropEvent((event) => {
+        if (event.payload.type === "enter" || event.payload.type === "over") {
+          setOver(true);
+        } else if (event.payload.type === "leave") {
+          setOver(false);
+        } else if (event.payload.type === "drop") {
+          setOver(false);
+          latestStagePaths.current(event.payload.paths);
+        }
+      })
+      .then((stop) => {
+        if (disposed) stop();
+        else unlisten = stop;
+      })
+      .catch((e) => {
+        toast.err("无法接收拖入文件", errorText(e));
+      });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [toast]);
+
   // 启动时收到待导入路径（右键「发送到 循迹」）→ 自动导入一次。
   useEffect(() => {
     if (!pendingPaths || pendingPaths.length === 0) return;
@@ -88,22 +223,6 @@ export default function ImportPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingPaths]);
 
-  const onDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    dragDepth.current = 0;
-    setOver(false);
-    const paths: string[] = [];
-    for (const file of Array.from(e.dataTransfer.files)) {
-      const p = (file as File & { path?: string }).path;
-      if (p) paths.push(p);
-    }
-    if (paths.length === 0) {
-      toast.err("读不到拖入文件的路径", "试试用「选择文件」按钮");
-      return;
-    }
-    await doImport(paths);
-  };
-
   const pickFiles = async () => {
     const picked = await open({
       multiple: true,
@@ -111,8 +230,7 @@ export default function ImportPage({
       title: "选择要收录的文件",
     });
     if (!picked) return;
-    const paths = Array.isArray(picked) ? picked : [picked];
-    await doImport(paths);
+    stagePaths(Array.isArray(picked) ? picked : [picked]);
   };
 
   const pickFolder = async () => {
@@ -122,7 +240,7 @@ export default function ImportPage({
       title: "选择要收录的文件夹",
     });
     if (!picked || Array.isArray(picked)) return;
-    await doImport([picked]);
+    stagePaths([picked]);
   };
 
   const chooseTargetDir = async () => {
@@ -173,46 +291,83 @@ export default function ImportPage({
     }
   };
 
+  const suggestedOnlyCategory =
+    categoryName && !categories.some((category) => category.name === categoryName)
+      ? categoryName
+      : null;
+
   return (
     <>
       <div className="page-head page-head-solo">
         <h2>导入</h2>
       </div>
 
-      <div
-        className={`dropzone${over ? " over" : ""}`}
-        onDragEnter={(e) => {
-          e.preventDefault();
-          dragDepth.current += 1;
-          setOver(true);
-        }}
-        onDragOver={(e) => e.preventDefault()}
-        onDragLeave={(e) => {
-          e.preventDefault();
-          dragDepth.current -= 1;
-          if (dragDepth.current <= 0) setOver(false);
-        }}
-        onDrop={onDrop}
-      >
-        <div className="big" aria-hidden="true">
-          ⇩
-        </div>
-        <h3>把文件拖到这里</h3>
-        <p>文件与文件夹都收。文件夹整体建一张卡，可以展开看子项。</p>
-        <div className="row" style={{ justifyContent: "center" }}>
-          <button className="btn btn-primary" onClick={pickFiles} disabled={busy}>
+      <div className={`dropzone${over ? " over" : ""}`} aria-busy={busy}>
+        <File className="big" size={34} aria-hidden="true" />
+        <h3>{over ? "松手加入待导入" : "把文件拖到这里"}</h3>
+        <p>
+          文件与文件夹都收。图片生成缩略图；TXT、Markdown、代码等文本可读取开头；
+          Word、PDF 等按文件信息收录。
+        </p>
+        <div className="row dropzone-actions">
+          <button className="btn btn-primary" onClick={pickFiles}>
             选择文件
           </button>
-          <button className="btn" onClick={pickFolder} disabled={busy}>
+          <button className="btn" onClick={pickFolder}>
             选择文件夹
           </button>
         </div>
       </div>
 
+      {stagedPaths.length > 0 && (
+        <section className="staged-panel">
+          <header>
+            <div>
+              <strong>待导入</strong>
+              <span className="badge badge-plain">{stagedPaths.length} 项</span>
+            </div>
+            <button
+              className="btn-icon"
+              type="button"
+              onClick={() => setStagedPaths([])}
+              disabled={busy}
+              title="清空待导入列表"
+              aria-label="清空待导入列表"
+            >
+              <Trash2 size={15} />
+            </button>
+          </header>
+          <ul>
+            {stagedPaths.map((path) => (
+              <li key={pathKey(path)}>
+                <File size={15} aria-hidden="true" />
+                <span className="name" title={path}>
+                  {fileName(path)}
+                </span>
+                <button
+                  className="btn-icon"
+                  type="button"
+                  onClick={() =>
+                    setStagedPaths((current) =>
+                      current.filter((item) => pathKey(item) !== pathKey(path)),
+                    )
+                  }
+                  disabled={busy}
+                  title="移出待导入列表"
+                  aria-label={`移除 ${fileName(path)}`}
+                >
+                  <X size={14} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <div className="import-settings">
         <div className="import-settings-grid">
           <label className="field import-location">
-            <span>这次放到哪</span>
+            <span>放到哪里</span>
             <div className="row">
               <input
                 className="input mono"
@@ -221,9 +376,10 @@ export default function ImportPage({
                   setTargetDir(e.target.value);
                   setUseTempDir(true);
                 }}
-                placeholder="默认存储位置（到设置里改）"
+                placeholder="默认存储位置"
               />
               <button className="btn" onClick={chooseTargetDir} type="button">
+                <FolderOpen size={15} />
                 选目录
               </button>
             </div>
@@ -241,33 +397,56 @@ export default function ImportPage({
             </select>
           </label>
 
-          <label className="field">
+          <div className="field import-category">
             <span>分类</span>
-            <div className="row category-picker">
-              <select
-                className="select"
-                value={categoryName}
-                onChange={(e) => setCategoryName(e.target.value)}
-              >
-                <option value="">未分类</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.name}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
+            <div className="category-chips" role="group" aria-label="选择分类">
               <button
-                className="btn btn-sm"
+                className={`category-chip${categoryName ? "" : " selected"}`}
+                type="button"
+                aria-pressed={!categoryName}
+                onClick={() => setCategoryName("")}
+              >
+                {!categoryName && <Check size={13} />}
+                不分类
+              </button>
+              {categories.map((category) => {
+                const selected = category.name === categoryName;
+                return (
+                  <button
+                    className={`category-chip${selected ? " selected" : ""}`}
+                    type="button"
+                    key={category.id}
+                    aria-pressed={selected}
+                    onClick={() => setCategoryName(category.name)}
+                  >
+                    {selected && <Check size={13} />}
+                    {category.name}
+                  </button>
+                );
+              })}
+              {suggestedOnlyCategory && (
+                <button
+                  className="category-chip selected ai-suggested"
+                  type="button"
+                  aria-pressed="true"
+                  onClick={() => setCategoryName(suggestedOnlyCategory)}
+                >
+                  <Sparkles size={13} />
+                  {suggestedOnlyCategory}
+                </button>
+              )}
+              <button
+                className="category-chip category-chip-create"
                 type="button"
                 onClick={() => setShowCategoryCreator((shown) => !shown)}
                 disabled={categoryBusy || busy}
                 aria-expanded={showCategoryCreator}
               >
-                <Plus size={14} />
-                新建
+                <Plus size={13} />
+                新建分类
               </button>
             </div>
-          </label>
+          </div>
 
           <label className="field import-note">
             <span>备注说明</span>
@@ -275,7 +454,7 @@ export default function ImportPage({
               className="textarea"
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="可留空，之后也能补充"
+              placeholder="可留空，也可以让 AI 先填一版"
               rows={2}
             />
           </label>
@@ -323,21 +502,56 @@ export default function ImportPage({
         )}
 
         <div className="import-actions">
-          {useTempDir && (
-            <button className="btn btn-sm" onClick={saveAsDefault} type="button">
-              存为默认
+          <div className="row row-wrap">
+            {useTempDir && (
+              <button className="btn btn-sm" onClick={saveAsDefault} type="button">
+                存为默认
+              </button>
+            )}
+            <button
+              className="btn"
+              type="button"
+              onClick={() => void fillWithAi(stagedPaths)}
+              disabled={stagedPaths.length === 0 || aiFilling || busy}
+            >
+              <Sparkles size={15} />
+              {aiFilling ? "AI 分析中…" : "AI 智能填充"}
             </button>
-          )}
+          </div>
+          <span className="spacer" />
           <button
-            className="btn ai-toggle"
+            className="btn btn-primary import-submit"
             type="button"
-            aria-pressed={analyzeAfter}
-            onClick={() => setAnalyzeAfter((enabled) => !enabled)}
-            title="导入时自动生成说明与分类建议"
+            onClick={() => void doImport(stagedPaths)}
+            disabled={stagedPaths.length === 0 || busy}
           >
-            <Sparkles size={15} />
-            {analyzeAfter ? "AI 分析已开" : "AI 分析"}
+            {busy ? "正在导入…" : `导入 ${stagedPaths.length || ""} 项`}
           </button>
+        </div>
+
+        <div className="auto-ai-row">
+          <div className="auto-ai-copy">
+            <Sparkles size={16} aria-hidden="true" />
+            <div>
+              <strong>自动 AI 填充</strong>
+              <span>加入文件后，自动生成分类和备注建议。</span>
+            </div>
+          </div>
+          <Switch
+            checked={autoAi}
+            onChange={(enabled) => {
+              if (enabled && aiConfigured !== true) {
+                setShowAiSetup(true);
+                return;
+              }
+              onAutoAiChange(enabled);
+              if (enabled && stagedPaths.length > 0) {
+                void fillWithAi(stagedPaths, true);
+              }
+            }}
+            disabled={aiConfigured === null || busy}
+            label="自动 AI 填充"
+          />
         </div>
       </div>
 
@@ -354,7 +568,7 @@ export default function ImportPage({
           </header>
           <ul>
             {report.items.map((item, i) => (
-              <li key={i}>
+              <li key={`${item.sourcePath}-${i}`}>
                 {item.error ? (
                   <span className="badge badge-danger">失败</span>
                 ) : item.existingCardId ? (
@@ -369,6 +583,47 @@ export default function ImportPage({
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {showAiSetup && (
+        <div className="modal-backdrop" onClick={() => setShowAiSetup(false)}>
+          <div className="modal modal-compact" onClick={(e) => e.stopPropagation()}>
+            <header>
+              <Sparkles size={18} aria-hidden="true" />
+              <h3>先配置 AI</h3>
+              <button
+                className="btn-icon"
+                type="button"
+                onClick={() => setShowAiSetup(false)}
+                aria-label="关闭"
+              >
+                <X size={15} />
+              </button>
+            </header>
+            <div className="body">
+              <p className="modal-lead">
+                自动分析或手动填充需要 Base URL、模型名和 API Key。配置一次后会保存在本机。
+              </p>
+              <div className="modal-note">
+                API Key 存入 Windows 凭据库，不会写进数据库。
+              </div>
+            </div>
+            <footer>
+              <button className="btn" onClick={() => setShowAiSetup(false)}>
+                稍后
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  setShowAiSetup(false);
+                  onNavigateSettings();
+                }}
+              >
+                去设置
+              </button>
+            </footer>
+          </div>
         </div>
       )}
     </>

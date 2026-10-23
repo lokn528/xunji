@@ -26,6 +26,9 @@ const MIGRATIONS: &[(i64, &str)] = &[(0, SCHEMA_V0), (1, SCHEMA_V1)];
 /// 期望的 schema 版本，等于已应用迁移的条数。
 const SCHEMA_VERSION: i64 = MIGRATIONS.len() as i64;
 
+/// 首次启动提供给用户的常用分类。删除后不会因为重启再次出现。
+const DEFAULT_CATEGORIES: [&str; 4] = ["学习", "工作", "生活", "资料"];
+
 /// 打开数据库并确保 schema 为最新。
 pub fn open(path: &Path) -> AppResult<Connection> {
     if let Some(parent) = path.parent() {
@@ -262,6 +265,19 @@ pub fn list_categories(conn: &Connection) -> AppResult<Vec<Category>> {
         out.push(r?);
     }
     Ok(out)
+}
+
+/// 首次启动时写入一组常用分类。
+///
+/// 用设置表的标记保证只执行一次：用户主动删掉默认分类后，重启不会又冒出来。
+pub fn seed_default_categories(conn: &Connection) -> AppResult<()> {
+    if get_setting(conn, "categories.defaults_seeded")?.is_some() {
+        return Ok(());
+    }
+    for name in DEFAULT_CATEGORIES {
+        ensure_category(conn, name)?;
+    }
+    set_setting(conn, "categories.defaults_seeded", "1")
 }
 
 /// 按名取分类 id；不存在则创建。
@@ -551,6 +567,23 @@ mod tests {
         create_category(&conn, "数学").unwrap();
         let err = create_category(&conn, "数学").unwrap_err();
         assert!(matches!(err, AppError::Invalid(_)), "重名应报错");
+    }
+
+    #[test]
+    fn 默认分类只初始化一次() {
+        let conn = open_in_memory().unwrap();
+        seed_default_categories(&conn).unwrap();
+        let first = list_categories(&conn).unwrap();
+        assert_eq!(first.len(), DEFAULT_CATEGORIES.len());
+
+        for category in first {
+            delete_category(&conn, &category.id).unwrap();
+        }
+        seed_default_categories(&conn).unwrap();
+        assert!(
+            list_categories(&conn).unwrap().is_empty(),
+            "用户删掉的默认分类不应在重启后重新出现"
+        );
     }
 
     #[test]

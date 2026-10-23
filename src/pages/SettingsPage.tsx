@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { Cable, MousePointer2, Power, Sparkles } from "lucide-react";
 import { api } from "../lib/ipc";
 import type { Settings } from "../lib/types";
 import { errorText } from "../lib/types";
 import { useToast } from "../components/Toast";
+import Switch from "../components/Switch";
 
 interface AppInfo {
   dataDir: string;
@@ -12,6 +14,30 @@ interface AppInfo {
   exePath: string;
   version: string;
 }
+
+const PROVIDER_PRESETS = {
+  openai_compatible: { label: "自定义 / 中转站", baseUrl: "", model: "" },
+  openai: {
+    label: "OpenAI 官方",
+    baseUrl: "https://api.openai.com/v1",
+    model: "gpt-4o-mini",
+  },
+  deepseek: {
+    label: "DeepSeek",
+    baseUrl: "https://api.deepseek.com/v1",
+    model: "deepseek-chat",
+  },
+  zhipu: {
+    label: "智谱 GLM",
+    baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+    model: "glm-4-flash",
+  },
+  qwen: {
+    label: "通义千问",
+    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    model: "qwen-plus",
+  },
+} as const;
 
 export default function SettingsPage({
   settings,
@@ -62,6 +88,17 @@ export default function SettingsPage({
     });
     if (!picked || Array.isArray(picked)) return;
     setDefaultDir(picked);
+  };
+
+  const changeProvider = (value: string) => {
+    setProvider(value);
+    const preset =
+      PROVIDER_PRESETS[value as keyof typeof PROVIDER_PRESETS] ??
+      PROVIDER_PRESETS.openai_compatible;
+    if (value !== "openai_compatible") {
+      setBaseUrl(preset.baseUrl);
+      setModel(preset.model);
+    }
   };
 
   const saveStorage = async () => {
@@ -181,7 +218,7 @@ export default function SettingsPage({
             </button>
           </div>
           <span className="hint">
-            导入时文件会落到这里。留空则只能在「仅登记」模式下导入。
+            首次启动会自动使用程序目录下的 library，可改成常用的资料盘或网盘目录。
           </span>
         </label>
 
@@ -221,20 +258,35 @@ export default function SettingsPage({
       <section className="panel">
         <h3>AI 供应商</h3>
 
+        <div className="protocol-card">
+          <div className="protocol-icon" aria-hidden="true">
+            <Cable size={17} />
+          </div>
+          <div>
+            <strong>接口协议：OpenAI Chat Completions</strong>
+            <span>
+              OpenAI 官方、DeepSeek、智谱、通义和多数中转站都兼容这个协议；
+              Anthropic Messages 等原生接口暂未接入。
+            </span>
+          </div>
+        </div>
+
         <label className="field">
           <span>供应商</span>
           <select
             className="select"
             value={provider}
-            onChange={(e) => setProvider(e.target.value)}
+            onChange={(e) => changeProvider(e.target.value)}
           >
-            <option value="openai_compatible">OpenAI 兼容（含中转站）</option>
-            <option value="deepseek">DeepSeek</option>
-            <option value="zhipu">智谱 GLM</option>
-            <option value="qwen">通义千问</option>
-            <option value="openai">OpenAI</option>
+            {Object.entries(PROVIDER_PRESETS).map(([value, preset]) => (
+              <option key={value} value={value}>
+                {preset.label}
+              </option>
+            ))}
           </select>
-          <span className="hint">都走 OpenAI 兼容的 /chat/completions 接口。</span>
+          <span className="hint">
+            选官方供应商会自动填入常用的 Base URL 和模型名，也可以再改。
+          </span>
         </label>
 
         <label className="field">
@@ -301,19 +353,21 @@ export default function SettingsPage({
           </span>
         </label>
 
-        <div className="switch-row">
-          <input
-            type="checkbox"
-            id="filename-only"
+        <div className="setting-toggle-row">
+          <div className="setting-toggle-copy">
+            <div className="setting-icon" aria-hidden="true">
+              <Sparkles size={16} />
+            </div>
+            <div>
+              <strong>仅用文件名分析</strong>
+              <span>打开时只发送文件名与类型；关掉后文本文件会附上开头一段。</span>
+            </div>
+          </div>
+          <Switch
             checked={filenameOnly}
-            onChange={(e) => setFilenameOnly(e.target.checked)}
+            onChange={setFilenameOnly}
+            label="仅用文件名分析"
           />
-          <label htmlFor="filename-only">
-            仅用文件名分析（不发送文件内容）
-            <span className="hint" style={{ marginTop: 2 }}>
-              打开时只把文件名和类型发给 AI。关掉后文本类文件会附上开头一段。
-            </span>
-          </label>
         </div>
 
         <div className="row">
@@ -328,22 +382,40 @@ export default function SettingsPage({
 
       <section className="panel">
         <h3>系统</h3>
-        <div className="row row-wrap">
-          <button className="btn" onClick={toggleMenu} disabled={busy}>
-            {menuInstalled ? "移除右键「发送到 循迹」" : "注册右键「发送到 循迹」"}
-          </button>
-          <span className="muted" style={{ fontSize: 12 }}>
-            {menuInstalled ? "已注册" : "未注册"}
-          </span>
+        <div className="setting-toggle-row">
+          <div className="setting-toggle-copy">
+            <div className="setting-icon" aria-hidden="true">
+              <MousePointer2 size={16} />
+            </div>
+            <div>
+              <strong>资源管理器右键菜单</strong>
+              <span>在文件和文件夹上显示「发送到 循迹」。</span>
+            </div>
+          </div>
+          <Switch
+            checked={menuInstalled}
+            onChange={() => void toggleMenu()}
+            disabled={busy}
+            label="资源管理器右键菜单"
+          />
         </div>
 
-        <div className="row row-wrap" style={{ marginTop: 12 }}>
-          <button className="btn" onClick={toggleAutostart} disabled={busy}>
-            {autostart ? "关闭开机自启" : "开启开机自启"}
-          </button>
-          <span className="muted" style={{ fontSize: 12 }}>
-            {autostart ? "已开启" : "未开启"}
-          </span>
+        <div className="setting-toggle-row">
+          <div className="setting-toggle-copy">
+            <div className="setting-icon" aria-hidden="true">
+              <Power size={16} />
+            </div>
+            <div>
+              <strong>开机自动启动</strong>
+              <span>登录 Windows 后在后台启动循迹。</span>
+            </div>
+          </div>
+          <Switch
+            checked={autostart}
+            onChange={() => void toggleAutostart()}
+            disabled={busy}
+            label="开机自动启动"
+          />
         </div>
 
         {info && (

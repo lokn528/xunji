@@ -19,6 +19,7 @@ use std::path::Path;
 use rusqlite::{Connection, OpenFlags};
 use tauri::Manager;
 
+use crate::error::AppResult;
 use crate::state::AppState;
 
 /// 应用入口。
@@ -52,6 +53,7 @@ pub fn run() {
             migrate_legacy_data(&legacy_dir, &data_dir)?;
 
             let conn = db::open(&data_dir.join("xunji.db"))?;
+            initialize_app_defaults(&conn, &data_dir)?;
             let state = AppState::new(conn, data_dir);
             // 右键「发送到 循迹」会把选中的文件路径作为命令行参数传进来。
             state.set_pending_imports(pending_import_paths());
@@ -84,6 +86,7 @@ pub fn run() {
             commands::settings::get_autostart,
             commands::settings::set_autostart,
             commands::ai::analyze_card,
+            commands::ai::analyze_path,
             commands::ai::test_ai_connection,
             shellmenu::install_shell_menu,
             shellmenu::uninstall_shell_menu,
@@ -92,6 +95,20 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("启动循迹失败");
+}
+
+/// 补齐首次启动应有的默认值：存储目录与常用分类。
+fn initialize_app_defaults(conn: &Connection, data_dir: &Path) -> AppResult<()> {
+    db::seed_default_categories(conn)?;
+
+    let mut settings = db::load_settings(conn)?;
+    if settings.default_dir.trim().is_empty() {
+        let library = data_dir.join("library");
+        std::fs::create_dir_all(&library)?;
+        settings.default_dir = library.to_string_lossy().to_string();
+        db::save_settings(conn, &settings)?;
+    }
+    Ok(())
 }
 
 /// 发布版以程序目录为数据目录，旧版 AppData 数据只向新目录合并。
@@ -205,6 +222,26 @@ pub fn pending_import_paths() -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn 首次启动会补齐默认分类和存储目录() {
+        let root = tempfile::tempdir().unwrap();
+        let conn = db::open_in_memory().unwrap();
+
+        initialize_app_defaults(&conn, root.path()).unwrap();
+
+        let categories = db::list_categories(&conn).unwrap();
+        let names = categories
+            .iter()
+            .map(|category| category.name.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(names, vec!["学习", "工作", "生活", "资料"]);
+
+        let settings = db::load_settings(&conn).unwrap();
+        let expected = root.path().join("library");
+        assert_eq!(Path::new(&settings.default_dir), expected);
+        assert!(expected.is_dir(), "默认存储目录应被创建");
+    }
 
     #[test]
     fn 旧版数据库与缩略图会迁移到程序目录() {

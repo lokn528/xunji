@@ -25,37 +25,56 @@ pub async fn analyze_card(
     analyze_card_inner(&state, &card_id).await
 }
 
-/// 分析一张卡片的内部实现——不写入数据库，只产出建议。
+/// 只分析一个文件路径，供导入前的「AI 智能填充」使用。
+#[tauri::command]
+pub async fn analyze_path(
+    state: State<'_, AppState>,
+    path: String,
+) -> AppResult<AiSuggestion> {
+    analyze_path_inner(&state, &path).await
+}
+
+/// 分析一张卡片——不写入数据库，只产出建议。
 pub async fn analyze_card_inner(
     state: &AppState,
     card_id: &str,
 ) -> AppResult<AiSuggestion> {
+    let path = state
+        .with_db(|conn| db::get_card(conn, card_id))?
+        .ok_or_else(|| AppError::Invalid("卡片不存在".into()))?
+        .file_path;
+    analyze_path_inner(state, &path).await
+}
+
+/// 按文件路径分析——卡片和导入预览共用同一套输入裁剪规则。
+async fn analyze_path_inner(state: &AppState, path: &str) -> AppResult<AiSuggestion> {
+    if !std::path::Path::new(path).exists() {
+        return Err(AppError::SourceMissing(path.to_string()));
+    }
+
     // 先同步取出所需数据，避免在 await 期间持有数据库锁。
     let (file_name, file_type, excerpt, categories, settings) = {
-        let card = state
-            .with_db(|conn| db::get_card(conn, card_id))?
-            .ok_or_else(|| AppError::Invalid("卡片不存在".into()))?;
         let cats = state.with_db(db::list_categories)?;
         let settings = state.with_db(db::load_settings)?;
         let excerpt = if settings.ai_filename_only {
             None
         } else {
-            crate::textprobe::excerpt(&card.file_path)
+            crate::textprobe::excerpt(path)
         };
         let names = cats.into_iter().map(|c| c.name).collect::<Vec<_>>();
         (
-            crate::fsops::file_name(&card.file_path),
-            crate::fsops::extension(&card.file_path),
+            crate::fsops::file_name(path),
+            crate::fsops::extension(path),
             excerpt,
             names,
             settings,
         )
     };
 
-    let api_key = super::settings::read_api_key()?;
     if settings.ai_base_url.trim().is_empty() || settings.ai_model.trim().is_empty() {
         return Err(AppError::AiUnavailable);
     }
+    let api_key = super::settings::read_api_key()?;
 
     let body = ai::build_request_body(
         &settings.ai_model,

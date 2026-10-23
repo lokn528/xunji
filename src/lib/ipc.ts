@@ -67,6 +67,8 @@ export const api = {
   // ---- AI ----
   analyzeCard: (cardId: string) =>
     invoke<AiSuggestion>("analyze_card", { cardId }),
+  analyzePath: (path: string) =>
+    invoke<AiSuggestion>("analyze_path", { path }),
   testAiConnection: () => invoke<string>("test_ai_connection"),
 
   // ---- 系统 ----
