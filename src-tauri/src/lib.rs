@@ -17,7 +17,7 @@ mod thumb;
 use std::path::Path;
 
 use rusqlite::{Connection, OpenFlags};
-use tauri::Manager;
+use tauri::{webview::PageLoadEvent, Manager};
 
 use crate::error::AppResult;
 use crate::state::AppState;
@@ -32,6 +32,13 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
+        .on_page_load(|webview, payload| {
+            if payload.event() == PageLoadEvent::Finished {
+                let window = webview.window();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        })
         .setup(|app| {
             let legacy_dir = app
                 .path()
