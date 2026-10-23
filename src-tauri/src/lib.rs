@@ -22,6 +22,26 @@ use tauri::{webview::PageLoadEvent, Manager};
 use crate::error::AppResult;
 use crate::state::AppState;
 
+#[cfg(windows)]
+fn apply_rounded_window_corners(window: &tauri::WebviewWindow) {
+    use windows::Win32::Graphics::Dwm::{
+        DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND,
+    };
+
+    if let Ok(hwnd) = window.hwnd() {
+        // Windows 11 原生圆角；旧系统不支持时会安全地忽略。
+        let preference = DWMWCP_ROUND;
+        unsafe {
+            let _ = DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_WINDOW_CORNER_PREFERENCE,
+                &preference as *const _ as *const std::ffi::c_void,
+                std::mem::size_of_val(&preference) as u32,
+            );
+        }
+    }
+}
+
 /// 应用入口。
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -65,6 +85,12 @@ pub fn run() {
             // 右键「发送到 循迹」会把选中的文件路径作为命令行参数传进来。
             state.set_pending_imports(pending_import_paths());
             app.manage(state);
+
+            #[cfg(windows)]
+            if let Some(window) = app.get_webview_window("main") {
+                apply_rounded_window_corners(&window);
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
