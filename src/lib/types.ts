@@ -4,6 +4,10 @@
 export type Origin = "imported_moved" | "imported_kept" | "sent_to";
 
 export type PlacementMode = "move" | "keep";
+export type AiProtocol =
+  | "openai_chat"
+  | "openai_responses"
+  | "anthropic_messages";
 
 export interface Card {
   id: string;
@@ -11,7 +15,7 @@ export interface Card {
   summary: string;
   filePath: string;
   thumbPath: string | null;
-  categoryId: string | null;
+  categoryIds: string[];
   origin: Origin;
   aiGenerated: boolean;
   needsSummary: boolean;
@@ -35,6 +39,8 @@ export interface Settings {
   defaultDir: string;
   placementMode: PlacementMode;
   aiProvider: string;
+  aiProviderName: string;
+  aiProtocol: AiProtocol;
   aiBaseUrl: string;
   aiModel: string;
   aiTemperature: number;
@@ -45,6 +51,8 @@ export interface Settings {
 
 export interface AiConfigInput {
   provider: string;
+  providerName: string;
+  protocol: AiProtocol;
   baseUrl: string;
   apiKey: string;
   model: string;
@@ -52,10 +60,19 @@ export interface AiConfigInput {
   filenameOnly: boolean;
 }
 
+export interface AiUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  reasoningTokens?: number | null;
+  cachedTokens?: number | null;
+}
+
 export interface AiSuggestion {
   summary: string;
-  suggestedCategory: string | null;
+  suggestedCategories: string[];
   raw: string;
+  usage?: AiUsage | null;
 }
 
 export interface ImportRequest {
@@ -63,7 +80,7 @@ export interface ImportRequest {
   targetDir?: string | null;
   placement?: PlacementMode | null;
   analyzeAfter: boolean;
-  category?: string | null;
+  categories?: string[];
   note?: string | null;
   origin?: Origin | null;
 }

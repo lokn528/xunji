@@ -59,6 +59,20 @@ function Shell() {
     setCards((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
   };
 
+  const onCategoryDeleted = (categoryId: string) => {
+    setCategories((prev) => prev.filter((category) => category.id !== categoryId));
+    setCards((prev) =>
+      prev.map((card) =>
+        card.categoryIds.includes(categoryId)
+          ? {
+              ...card,
+              categoryIds: card.categoryIds.filter((id) => id !== categoryId),
+            }
+          : card,
+      ),
+    );
+  };
+
   const relink = async (card: Card) => {
     const picked = await open({
       multiple: false,
@@ -77,7 +91,7 @@ function Shell() {
 
   return (
     <div className="app">
-      <Sidebar page={page} onNavigate={setPage} cardCount={cards.length} />
+      <Sidebar page={page} onNavigate={setPage} />
       <div className="content">
         <TitleBar />
         <main className="main">
@@ -110,7 +124,8 @@ function Shell() {
             <CategoryPage
               cards={cards}
               categories={categories}
-              onChanged={onChanged}
+              onCategoriesChange={setCategories}
+              onCategoryDeleted={onCategoryDeleted}
               onOpenCard={setEditing}
             />
           )}
@@ -125,6 +140,7 @@ function Shell() {
         <SummaryEditor
           card={editing}
           categories={categories}
+          onCategoriesChange={setCategories}
           onClose={() => setEditing(null)}
           onSaved={(c) => {
             onChanged(c);

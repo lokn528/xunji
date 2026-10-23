@@ -43,7 +43,8 @@ pub struct Card {
     /// 指向磁盘实体的绝对路径——卡片的核心。
     pub file_path: String,
     pub thumb_path: Option<String>,
-    pub category_id: Option<String>,
+    /// 该卡片拥有的全部分类 id。一个文件可以同时出现在多个分类中。
+    pub category_ids: Vec<String>,
     pub origin: Origin,
     /// 该说明是否由 AI 生成。
     pub ai_generated: bool,
@@ -112,9 +113,9 @@ pub struct ImportRequest {
     /// 导入后是否立即触发 AI 分析。默认不触发。
     #[serde(default)]
     pub analyze_after: bool,
-    /// 本批卡片统一归入的分类名；为空表示暂不分类。
+    /// 本批卡片统一添加的分类名；为空表示暂不分类。
     #[serde(default)]
-    pub category: Option<String>,
+    pub categories: Vec<String>,
     /// 本批卡片统一写入的备注说明；为空表示待写。
     #[serde(default)]
     pub note: Option<String>,
@@ -169,6 +170,21 @@ pub struct FolderChild {
     pub is_dir: bool,
 }
 
+/// 一次模型调用返回的 token 用量。
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiUsage {
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub total_tokens: u64,
+    /// 输出中用于推理的 token；供应商未单独返回时不显示。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_tokens: Option<u64>,
+    /// 命中缓存的输入 token。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cached_tokens: Option<u64>,
+}
+
 /// AI 分析的建议结果——先进输入框，用户确认后才落库。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -176,9 +192,48 @@ pub struct AiSuggestion {
     /// 一句话说明，≤50 字。
     pub summary: String,
     /// 建议分类；用户现有分类之外的会被视为新分类建议。
-    pub suggested_category: Option<String>,
+    #[serde(default)]
+    pub suggested_categories: Vec<String>,
     /// AI 原始返回，便于排障。
     pub raw: String,
+    /// 本次请求的 token 用量；部分兼容接口可能不返回。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<AiUsage>,
+}
+
+/// 模型接口协议。供应商名称和协议分开保存，避免把中转站误当成固定协议。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AiProtocol {
+    #[serde(rename = "openai_chat")]
+    OpenAiChat,
+    #[serde(rename = "openai_responses")]
+    OpenAiResponses,
+    #[serde(rename = "anthropic_messages")]
+    AnthropicMessages,
+}
+
+impl Default for AiProtocol {
+    fn default() -> Self {
+        Self::OpenAiChat
+    }
+}
+
+impl AiProtocol {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::OpenAiChat => "openai_chat",
+            Self::OpenAiResponses => "openai_responses",
+            Self::AnthropicMessages => "anthropic_messages",
+        }
+    }
+
+    pub fn parse(value: &str) -> Self {
+        match value {
+            "openai_responses" => Self::OpenAiResponses,
+            "anthropic_messages" => Self::AnthropicMessages,
+            _ => Self::OpenAiChat,
+        }
+    }
 }
 
 /// 应用设置（非敏感部分）。
@@ -191,7 +246,11 @@ pub struct Settings {
     pub placement_mode: PlacementMode,
     /// AI 供应商标识。
     pub ai_provider: String,
-    /// OpenAI 兼容 Base URL。
+    /// AI 供应商显示名称。
+    pub ai_provider_name: String,
+    /// 接口协议。
+    pub ai_protocol: AiProtocol,
+    /// API Base URL。
     pub ai_base_url: String,
     /// 模型名。
     pub ai_model: String,
@@ -211,6 +270,8 @@ impl Default for Settings {
             default_dir: String::new(),
             placement_mode: PlacementMode::Move,
             ai_provider: "openai_compatible".into(),
+            ai_provider_name: "OpenAI 兼容".into(),
+            ai_protocol: AiProtocol::OpenAiChat,
             ai_base_url: String::new(),
             ai_model: String::new(),
             ai_temperature: 0.3,
@@ -226,6 +287,8 @@ impl Default for Settings {
 #[serde(rename_all = "camelCase")]
 pub struct AiConfigInput {
     pub provider: String,
+    pub provider_name: String,
+    pub protocol: AiProtocol,
     pub base_url: String,
     /// 空串表示不改动已存 key。
     pub api_key: String,

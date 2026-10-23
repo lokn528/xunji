@@ -15,12 +15,77 @@ mod textprobe;
 mod thumb;
 
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use rusqlite::{Connection, OpenFlags};
-use tauri::{webview::PageLoadEvent, Manager};
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    webview::PageLoadEvent,
+    AppHandle, Manager, WindowEvent,
+};
 
 use crate::error::AppResult;
 use crate::state::AppState;
+
+#[derive(Default)]
+struct TrayState {
+    quitting: AtomicBool,
+}
+
+/// 从托盘恢复主窗口，并把它带到前台。
+fn show_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+/// 标题栏的最小化按钮使用这个命令，不进入任务栏，只留在系统托盘。
+#[tauri::command]
+fn hide_to_tray(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.hide().map_err(|error| error.to_string())
+}
+
+/// 注册常驻系统托盘：左键恢复窗口，右键菜单负责打开或退出。
+fn setup_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let open_item = MenuItem::with_id(app, "tray_open", "打开循迹", true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "tray_quit", "退出循迹", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&open_item, &quit_item])?;
+
+    let mut builder = TrayIconBuilder::with_id("main-tray")
+        .tooltip("循迹")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "tray_open" => show_main_window(app),
+            "tray_quit" => {
+                app.state::<TrayState>()
+                    .quitting
+                    .store(true, Ordering::SeqCst);
+                app.exit(0);
+            }
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                show_main_window(tray.app_handle());
+            }
+        });
+
+    if let Some(icon) = app.default_window_icon().cloned() {
+        builder = builder.icon(icon);
+    }
+
+    builder.build(app)?;
+    Ok(())
+}
 
 #[cfg(windows)]
 fn apply_rounded_window_corners(window: &tauri::WebviewWindow) {
@@ -46,12 +111,26 @@ fn apply_rounded_window_corners(window: &tauri::WebviewWindow) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(TrayState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                let quitting = window
+                    .app_handle()
+                    .state::<TrayState>()
+                    .quitting
+                    .load(Ordering::SeqCst);
+                if !quitting {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .on_page_load(|webview, payload| {
             if payload.event() == PageLoadEvent::Finished {
                 let window = webview.window();
@@ -91,14 +170,17 @@ pub fn run() {
                 apply_rounded_window_corners(&window);
             }
 
+            setup_tray(app)?;
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            hide_to_tray,
             commands::cards::list_cards,
             commands::cards::get_card,
             commands::cards::set_summary,
             commands::cards::set_display_name,
-            commands::cards::set_category,
+            commands::cards::set_categories,
             commands::cards::set_pinned,
             commands::cards::relink_card,
             commands::cards::delete_card,

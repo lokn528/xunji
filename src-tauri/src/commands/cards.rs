@@ -60,15 +60,15 @@ pub fn set_display_name(
     })
 }
 
-/// 设置分类。传入空名表示取消分类；分类不存在时自动创建。
+/// 设置卡片的多个分类。空数组表示取消分类；分类不存在时自动创建。
 #[tauri::command]
-pub fn set_category(
+pub fn set_categories(
     state: State<'_, AppState>,
     id: String,
-    category: String,
+    categories: Vec<String>,
 ) -> AppResult<Card> {
     state.with_db(|conn| {
-        db::set_category(conn, &id, &category)?;
+        db::set_categories(conn, &id, &categories)?;
         db::get_card(conn, &id)?
             .ok_or_else(|| AppError::Invalid("卡片不存在".into()))
     })

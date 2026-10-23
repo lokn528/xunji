@@ -32,13 +32,13 @@ function iconFor(path: string, isDir: boolean): string {
 
 export default function CardTile({
   card,
-  categoryName,
+  categoryNames,
   onOpenSummary,
   onChanged,
   onRelink,
 }: {
   card: Card;
-  categoryName?: string;
+  categoryNames: string[];
   onOpenSummary: (card: Card) => void;
   onChanged: (card: Card) => void;
   onRelink: (card: Card) => void;
@@ -121,8 +121,17 @@ export default function CardTile({
         </div>
 
         <div className="card-meta">
-          {categoryName ? (
-            <span className="badge">{categoryName}</span>
+          {categoryNames.length > 0 ? (
+            <>
+              {categoryNames.slice(0, 2).map((name) => (
+                <span className="badge" key={name}>
+                  {name}
+                </span>
+              ))}
+              {categoryNames.length > 2 && (
+                <span className="badge badge-plain">+{categoryNames.length - 2}</span>
+              )}
+            </>
           ) : (
             <span className="badge badge-plain">未分类</span>
           )}

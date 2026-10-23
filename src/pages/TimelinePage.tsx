@@ -16,9 +16,10 @@ export default function TimelinePage({
   onChanged: (card: Card) => void;
   onRelink: (card: Card) => void;
 }) {
-  const nameOf = useMemo(() => {
+  const namesOf = useMemo(() => {
     const map = new Map(categories.map((c) => [c.id, c.name]));
-    return (id: string | null) => (id ? map.get(id) : undefined);
+    return (ids: string[]) =>
+      ids.map((id) => map.get(id)).filter((name): name is string => Boolean(name));
   }, [categories]);
 
   const pinned = cards.filter((c) => c.pinned);
@@ -68,7 +69,7 @@ export default function TimelinePage({
               <CardTile
                 key={card.id}
                 card={card}
-                categoryName={nameOf(card.categoryId)}
+                categoryNames={namesOf(card.categoryIds)}
                 onOpenSummary={onOpenSummary}
                 onChanged={onChanged}
                 onRelink={onRelink}
@@ -89,7 +90,7 @@ export default function TimelinePage({
               <CardTile
                 key={card.id}
                 card={card}
-                categoryName={nameOf(card.categoryId)}
+                categoryNames={namesOf(card.categoryIds)}
                 onOpenSummary={onOpenSummary}
                 onChanged={onChanged}
                 onRelink={onRelink}

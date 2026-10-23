@@ -2,7 +2,8 @@
 name = "xunji"
 version = "0.1.0"
 description = "循迹 —— 本地文件卡片索引工具"
-authors = ["xunji"]
+authors = ["lokn528"]
+license = "MIT"
 edition = "2024"
 rust-version = "1.85"
 
@@ -16,7 +17,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 # 版本与 package.json 里的 npm 包严格对齐——Tauri CLI 会校验二者同主次版本，
 # 不一致时直接拒绝构建。改动其一必须同步另一侧。
-tauri = { version = "=2.11.6", features = [] }
+tauri = { version = "=2.11.6", features = ["tray-icon"] }
 tauri-plugin-dialog = "=2.7.3"
 tauri-plugin-opener = "=2.5.5"
 tauri-plugin-autostart = "2"

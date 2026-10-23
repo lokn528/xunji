@@ -1,26 +1,43 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/ipc";
-import type { Card, Category } from "../lib/types";
+import type { AiUsage, Card, Category } from "../lib/types";
 import { errorText } from "../lib/types";
+import AiUsageLine from "./AiUsageLine";
+import CategoryPicker from "./CategoryPicker";
 import { useToast } from "./Toast";
 
 export default function SummaryEditor({
   card,
   categories,
   initialSuggestion,
+  onCategoriesChange,
   onClose,
   onSaved,
 }: {
   card: Card;
   categories: Category[];
-  initialSuggestion?: { summary: string; category: string | null } | null;
+  initialSuggestion?: {
+    summary: string;
+    suggestedCategories: string[];
+    usage?: AiUsage | null;
+  } | null;
+  onCategoriesChange: (categories: Category[]) => void;
   onClose: () => void;
   onSaved: (card: Card) => void;
 }) {
   const toast = useToast();
   const [summary, setSummary] = useState(card.summary);
-  const [category, setCategory] = useState("");
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(() => {
+    const names = new Map(categories.map((category) => [category.id, category.name]));
+    return card.categoryIds
+      .map((id) => names.get(id))
+      .filter((name): name is string => Boolean(name));
+  });
+  const [suggestedCategories, setSuggestedCategories] = useState<string[]>([]);
   const [aiGenerated, setAiGenerated] = useState(card.aiGenerated);
+  const [aiUsage, setAiUsage] = useState<AiUsage | null>(
+    initialSuggestion?.usage ?? null,
+  );
   const [asking, setAsking] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -30,24 +47,30 @@ export default function SummaryEditor({
         setSummary(initialSuggestion.summary);
         setAiGenerated(true);
       }
-      if (initialSuggestion.category) {
-        setCategory(initialSuggestion.category);
-      }
+      setSuggestedCategories(initialSuggestion.suggestedCategories);
+      setAiUsage(initialSuggestion.usage ?? null);
+      setSelectedCategories((current) => [
+        ...new Set([...current, ...initialSuggestion.suggestedCategories]),
+      ]);
     }
   }, [initialSuggestion]);
 
   const askAi = async () => {
     setAsking(true);
+    setAiUsage(null);
     try {
       const s = await api.analyzeCard(card.id);
       // AI 结果只填进输入框，用户点保存才落库。
       setSummary(s.summary);
       setAiGenerated(true);
-      if (s.suggestedCategory) {
-        setCategory(s.suggestedCategory);
-      }
-      toast.ok("AI 给了一段说明", "确认或改写后再保存");
+      setSuggestedCategories(s.suggestedCategories);
+      setAiUsage(s.usage ?? null);
+      setSelectedCategories((current) => [
+        ...new Set([...current, ...s.suggestedCategories]),
+      ]);
+      toast.ok("AI 已填入说明和分类", "确认或修改后再保存");
     } catch (e) {
+      setAiUsage(null);
       toast.err("AI 不可用，可手动填写", errorText(e));
     } finally {
       setAsking(false);
@@ -58,9 +81,7 @@ export default function SummaryEditor({
     setSaving(true);
     try {
       let updated = await api.setSummary(card.id, summary, aiGenerated);
-      if (category.trim()) {
-        updated = await api.setCategory(card.id, category.trim());
-      }
+      updated = await api.setCategories(card.id, selectedCategories);
       onSaved(updated);
       toast.ok("已保存");
       onClose();
@@ -103,24 +124,17 @@ export default function SummaryEditor({
             </span>
           </label>
 
-          <label className="field">
+          <div className="field">
             <span>分类</span>
-            <input
-              className="input"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              placeholder="留空表示不分类"
-              list="category-options"
+            <CategoryPicker
+              categories={categories}
+              selected={selectedCategories}
+              suggested={suggestedCategories}
+              onChange={setSelectedCategories}
+              onCategoriesChange={onCategoriesChange}
+              disabled={saving}
             />
-            <datalist id="category-options">
-              {categories.map((c) => (
-                <option key={c.id} value={c.name} />
-              ))}
-            </datalist>
-            <span className="hint">
-              填一个不存在的名字会自动创建该分类。
-            </span>
-          </label>
+          </div>
 
           <button
             className="btn"
@@ -131,8 +145,9 @@ export default function SummaryEditor({
             {asking ? "AI 正在想…" : "让 AI 写说明"}
           </button>
           <div className="hint" style={{ marginTop: 6 }}>
-            AI 只给建议，不会自动保存，也不会自动搬动你的文件。
+            AI 会先选好建议分类；你确认、增删后再保存，也不会自动搬动文件。
           </div>
+          <AiUsageLine usage={aiUsage} />
         </div>
 
         <footer>

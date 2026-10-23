@@ -19,15 +19,11 @@ use crate::state::AppState;
 /// 本批导入统一应用的卡片元数据。
 #[derive(Debug, Clone, Copy, Default)]
 struct ImportCardOptions<'a> {
-    category: Option<&'a str>,
+    categories: &'a [String],
     note: Option<&'a str>,
 }
 
 impl<'a> ImportCardOptions<'a> {
-    fn category_name(self) -> Option<&'a str> {
-        self.category.map(str::trim).filter(|name| !name.is_empty())
-    }
-
     fn note_text(self) -> &'a str {
         self.note.map(str::trim).unwrap_or_default()
     }
@@ -57,7 +53,7 @@ pub async fn import_paths(
 
     let placement = effective_placement(placement, &target_dir, origin);
     let card_options = ImportCardOptions {
-        category: request.category.as_deref(),
+        categories: &request.categories,
         note: request.note.as_deref(),
     };
 
@@ -212,8 +208,15 @@ fn import_one_with_options(
     card.thumb_path = thumb_path;
 
     let insert = state.with_db(|conn| {
-        if let Some(name) = options.category_name() {
-            card.category_id = Some(db::ensure_category(conn, name)?);
+        for name in options.categories {
+            let name = name.trim();
+            if name.is_empty() {
+                continue;
+            }
+            let category_id = db::ensure_category(conn, name)?;
+            if !card.category_ids.contains(&category_id) {
+                card.category_ids.push(category_id);
+            }
         }
         card.summary = options.note_text().to_string();
         card.needs_summary = card.summary.is_empty();
@@ -262,7 +265,7 @@ fn build_card(source: &str, final_path: &str, origin: Origin, is_dir: bool) -> C
         summary: String::new(),
         file_path: final_path.to_string(),
         thumb_path: None,
-        category_id: None,
+        category_ids: Vec::new(),
         origin,
         ai_generated: false,
         // 说明留空 → 标记为待写（FR-006）
@@ -389,7 +392,7 @@ mod tests {
             PlacementMode::Keep,
             Origin::ImportedKept,
             ImportCardOptions {
-                category: Some("项目资料"),
+                categories: &["项目资料".to_string(), "甲方文件".to_string()],
                 note: Some("  甲方确认版  "),
             },
         )
@@ -400,11 +403,11 @@ mod tests {
         assert!(!cards[0].needs_summary, "手写备注应清除待写标记");
 
         let categories = state.with_db(db::list_categories).unwrap();
-        assert_eq!(categories.len(), 1);
-        assert_eq!(
-            cards[0].category_id.as_deref(),
-            Some(categories[0].id.as_str())
-        );
+        assert_eq!(categories.len(), 2);
+        assert_eq!(cards[0].category_ids.len(), 2);
+        assert!(categories
+            .iter()
+            .all(|category| cards[0].category_ids.contains(&category.id)));
     }
 
     #[test]
@@ -421,7 +424,7 @@ mod tests {
             PlacementMode::Keep,
             Origin::ImportedKept,
             ImportCardOptions {
-                category: None,
+                categories: &[],
                 note: Some("   "),
             },
         )
@@ -449,7 +452,7 @@ mod tests {
             PlacementMode::Keep,
             Origin::ImportedKept,
             ImportCardOptions {
-                category: Some("参考资料"),
+                categories: &["参考资料".to_string()],
                 note: None,
             },
         )
@@ -458,7 +461,7 @@ mod tests {
         let categories = state.with_db(db::list_categories).unwrap();
         let cards = state.with_db(db::list_cards).unwrap();
         assert_eq!(categories.len(), 1, "不应重复创建同名分类");
-        assert_eq!(cards[0].category_id.as_deref(), Some(existing.id.as_str()));
+        assert_eq!(cards[0].category_ids, vec![existing.id.clone()]);
     }
 
     #[test]

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Copy, Minus, Square, X } from "lucide-react";
+import { api } from "../lib/ipc";
 
 /**
  * 自绘标题栏。
@@ -59,10 +60,10 @@ export default function TitleBar() {
         <button
           className="win-btn"
           type="button"
-          aria-label="最小化"
-          title="最小化"
+          aria-label="隐藏到系统托盘"
+          title="隐藏到系统托盘"
           data-tauri-drag-region="false"
-          onClick={run(() => getCurrentWindow().minimize())}
+          onClick={run(api.hideToTray)}
         >
           <Minus size={15} strokeWidth={1.7} />
         </button>
@@ -83,10 +84,10 @@ export default function TitleBar() {
         <button
           className="win-btn win-btn-close"
           type="button"
-          aria-label="关闭"
-          title="关闭"
+          aria-label="关闭到系统托盘"
+          title="关闭到系统托盘"
           data-tauri-drag-region="false"
-          onClick={run(() => getCurrentWindow().close())}
+          onClick={run(api.hideToTray)}
         >
           <X size={15} strokeWidth={1.7} />
         </button>

@@ -65,6 +65,8 @@
 桌面开发」工作负载）与 Windows SDK。
 
 ```bash
+git clone https://github.com/lokn528/xunji.git
+cd xunji
 npm install
 npm run tauri dev        # 开发模式
 npm run tauri build      # 打包（产物在 src-tauri/target/release/bundle/）
@@ -129,4 +131,9 @@ v1 明确不做：文件内容编辑、云同步、账号体系、全文检索�
 
 ## 许可
 
-私有项目。
+本项目采用 [MIT License](LICENSE) 开源。欢迎提交 Issue 和 Pull Request。
+
+第三方依赖与 Spec Kit 工具材料沿用各自的上游许可证。
+
+安全问题请按 [SECURITY.md](SECURITY.md) 私密报告，不要公开 API Key、数据库或
+包含私人路径的截图。

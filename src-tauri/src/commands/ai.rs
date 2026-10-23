@@ -5,14 +5,19 @@
 
 use tauri::State;
 
-use crate::ai::{self, ChatRequest};
+use crate::ai;
 use crate::db;
 use crate::error::{AppError, AppResult};
-use crate::models::AiSuggestion;
+use crate::models::{AiProtocol, AiSuggestion, AiUsage};
 use crate::state::AppState;
 
 /// AI 请求超时（秒）。
 const TIMEOUT_SECS: u64 = 30;
+
+struct AiCallResult {
+    content: String,
+    usage: Option<AiUsage>,
+}
 
 /// 分析一张卡片，产出说明与分类建议。
 ///
@@ -77,6 +82,7 @@ async fn analyze_path_inner(state: &AppState, path: &str) -> AppResult<AiSuggest
     let api_key = super::settings::read_api_key()?;
 
     let body = ai::build_request_body(
+        settings.ai_protocol,
         &settings.ai_model,
         &file_name,
         &file_type,
@@ -85,8 +91,10 @@ async fn analyze_path_inner(state: &AppState, path: &str) -> AppResult<AiSuggest
         settings.ai_temperature,
     );
 
-    let raw = call_chat(&settings.ai_base_url, &api_key, body).await?;
-    ai::parse_suggestion(&raw)
+    let response = call_ai(settings.ai_protocol, &settings.ai_base_url, &api_key, body).await?;
+    let mut suggestion = ai::parse_suggestion(&response.content)?;
+    suggestion.usage = response.usage;
+    Ok(suggestion)
 }
 
 /// 测试 AI 连通性。
@@ -98,31 +106,42 @@ pub async fn test_ai_connection(state: State<'_, AppState>) -> AppResult<String>
         return Err(AppError::AiUnavailable);
     }
 
-    let body = ChatRequest {
-        model: settings.ai_model.clone(),
-        messages: vec![crate::ai::ChatMessage {
-            role: "user",
-            content: "ping".into(),
-        }],
-        temperature: 0.0,
-    };
+    let body = ai::build_probe_body(settings.ai_protocol, &settings.ai_model);
 
-    call_chat(&settings.ai_base_url, &api_key, body).await?;
-    Ok("连接正常".into())
+    let response = call_ai(settings.ai_protocol, &settings.ai_base_url, &api_key, body).await?;
+    Ok(match response.usage {
+        Some(usage) => format!(
+            "连接正常，本次检测输入 {} / 输出 {} / 合计 {} tokens",
+            usage.input_tokens, usage.output_tokens, usage.total_tokens
+        ),
+        None => "连接正常".into(),
+    })
 }
 
-/// 发起一次 chat/completions 请求，返回文本内容。
-async fn call_chat(base_url: &str, api_key: &str, body: ChatRequest) -> AppResult<String> {
-    let url = ai::chat_completions_url(base_url);
+/// 按选定的协议发起请求，返回文本内容和 token 用量。
+async fn call_ai(
+    protocol: AiProtocol,
+    base_url: &str,
+    api_key: &str,
+    body: serde_json::Value,
+) -> AppResult<AiCallResult> {
+    let url = ai::api_url(protocol, base_url);
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(TIMEOUT_SECS))
         .build()
         .map_err(|e| AppError::AiRequestFailed(e.to_string()))?;
 
-    let resp = client
-        .post(&url)
-        .header("Authorization", format!("Bearer {api_key}"))
-        .header("Content-Type", "application/json")
+    let request = client.post(&url).header("Content-Type", "application/json");
+    let request = match protocol {
+        AiProtocol::OpenAiChat | AiProtocol::OpenAiResponses => {
+            request.header("Authorization", format!("Bearer {api_key}"))
+        }
+        AiProtocol::AnthropicMessages => request
+            .header("x-api-key", api_key)
+            .header("anthropic-version", "2023-06-01"),
+    };
+
+    let resp = request
         .json(&body)
         .send()
         .await
@@ -138,11 +157,10 @@ async fn call_chat(base_url: &str, api_key: &str, body: ChatRequest) -> AppResul
         )));
     }
 
-    let json: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|_| AppError::AiInvalidResponse)?;
-    ai::extract_content(&json)
+    let json: serde_json::Value = resp.json().await.map_err(|_| AppError::AiInvalidResponse)?;
+    let content = ai::extract_content(protocol, &json)?;
+    let usage = ai::extract_usage(protocol, &json);
+    Ok(AiCallResult { content, usage })
 }
 
 /// 把 reqwest 错误转成用户能看懂的中文。

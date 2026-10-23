@@ -65,8 +65,51 @@ pub fn set_ai_config(
     state: State<'_, AppState>,
     config: AiConfigInput,
 ) -> AppResult<Settings> {
-    // 先写凭据库：写失败就不要改 settings，避免出现"配置显示已保存但实际没 key"。
+    let provider = config.provider.trim().to_string();
+    let provider_name = config.provider_name.trim().to_string();
+    let base_url = config.base_url.trim().trim_end_matches('/').to_string();
+    let model = config.model.trim().to_string();
+
+    if provider.is_empty() {
+        return Err(AppError::Invalid("请填写 Provider ID".into()));
+    }
+    let mut provider_chars = provider.chars();
+    let valid_provider = provider_chars
+        .next()
+        .is_some_and(|ch| ch.is_ascii_lowercase())
+        && provider_chars
+            .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-' || ch == '_')
+        && !provider.ends_with('-');
+    if !valid_provider {
+        return Err(AppError::Invalid(
+            "Provider ID 只能使用小写字母、数字、连字符和下划线，并且必须以字母开头".into(),
+        ));
+    }
+    if provider_name.is_empty() {
+        return Err(AppError::Invalid("请填写供应商显示名称".into()));
+    }
+    if base_url.is_empty() || !(base_url.starts_with("https://") || base_url.starts_with("http://"))
+    {
+        return Err(AppError::Invalid(
+            "API 地址必须以 http:// 或 https:// 开头".into(),
+        ));
+    }
+    if model.is_empty() {
+        return Err(AppError::Invalid("请填写模型名称".into()));
+    }
+    if !(0.0..=2.0).contains(&config.temperature) {
+        return Err(AppError::Invalid("温度必须在 0 到 2 之间".into()));
+    }
+
+    let current = state.with_db(db::load_settings)?;
     let key = config.api_key.trim().to_string();
+    if provider != current.ai_provider && key.is_empty() && has_api_key()? {
+        return Err(AppError::Invalid(
+            "更换提供商后请重新填写 API Key，避免误用旧密钥".into(),
+        ));
+    }
+
+    // 先写凭据库：写失败就不要改 settings，避免出现"配置显示已保存但实际没 key"。
     if !key.is_empty() {
         entry()?
             .set_password(&key)
@@ -75,9 +118,11 @@ pub fn set_ai_config(
 
     state.with_db(|conn| {
         let mut s = db::load_settings(conn)?;
-        s.ai_provider = config.provider;
-        s.ai_base_url = config.base_url;
-        s.ai_model = config.model;
+        s.ai_provider = provider;
+        s.ai_provider_name = provider_name;
+        s.ai_protocol = config.protocol;
+        s.ai_base_url = base_url;
+        s.ai_model = model;
         s.ai_temperature = config.temperature;
         s.ai_filename_only = config.filename_only;
         db::save_settings(conn, &s)?;

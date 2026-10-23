@@ -40,3 +40,13 @@ src-tauri/gen/schemas
 
 # Local UI screenshots used for visual self-checks
 .shots/
+
+# Local planning notes and runtime data must never be published
+.planning/
+.env
+.env.*
+!.env.example
+/xunji.db
+/xunji.db-*
+/library/
+/thumbs/

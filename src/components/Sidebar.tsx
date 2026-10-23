@@ -13,11 +13,9 @@ const SETTINGS_PAGE: PageDef = { key: "settings", label: "设置", icon: "⚙" }
 export default function Sidebar({
   page,
   onNavigate,
-  cardCount,
 }: {
   page: PageKey;
   onNavigate: (p: PageKey) => void;
-  cardCount: number;
 }) {
   const item = (p: PageDef) => (
     <button
@@ -29,12 +27,6 @@ export default function Sidebar({
         {p.icon}
       </span>
       <span>{p.label}</span>
-      {p.key === "timeline" && cardCount > 0 && <span className="spacer" />}
-      {p.key === "timeline" && cardCount > 0 && (
-        <span className="muted" style={{ fontSize: 11 }}>
-          {cardCount}
-        </span>
-      )}
     </button>
   );
 
@@ -43,7 +35,7 @@ export default function Sidebar({
       {/* 左上角品牌区也是窗口拖拽区（无边框窗口没有原生标题栏可拖）。 */}
       <div className="brand" data-tauri-drag-region="deep">
         <h1>循迹</h1>
-        <p>所有东西都有迹可寻</p>
+        <p>所有东西都有迹可循</p>
       </div>
 
       <nav className="nav">{PRIMARY_PAGES.map(item)}</nav>

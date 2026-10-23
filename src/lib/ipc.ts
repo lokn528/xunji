@@ -16,6 +16,9 @@ import type {
 } from "./types";
 
 export const api = {
+  // ---- 窗口 ----
+  hideToTray: () => invoke<void>("hide_to_tray"),
+
   // ---- 卡片 ----
   listCards: () => invoke<Card[]>("list_cards"),
   getCard: (id: string) => invoke<Card | null>("get_card", { id }),
@@ -23,8 +26,8 @@ export const api = {
     invoke<Card>("set_summary", { id, summary, aiGenerated }),
   setDisplayName: (id: string, displayName: string) =>
     invoke<Card>("set_display_name", { id, displayName }),
-  setCategory: (id: string, category: string) =>
-    invoke<Card>("set_category", { id, category }),
+  setCategories: (id: string, categories: string[]) =>
+    invoke<Card>("set_categories", { id, categories }),
   setPinned: (id: string, pinned: boolean) =>
     invoke<Card>("set_pinned", { id, pinned }),
   relinkCard: (id: string, newPath: string) =>

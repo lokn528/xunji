@@ -1,18 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
-import {
-  Check,
-  File,
-  FolderOpen,
-  Plus,
-  Sparkles,
-  Trash2,
-  X,
-} from "lucide-react";
+import { File, FolderOpen, Sparkles, Trash2, X } from "lucide-react";
 import { api } from "../lib/ipc";
-import type { Category, ImportResult, Origin, Settings } from "../lib/types";
+import type {
+  AiUsage,
+  Category,
+  ImportResult,
+  Origin,
+  Settings,
+} from "../lib/types";
 import { errorText } from "../lib/types";
+import AiUsageLine from "../components/AiUsageLine";
+import CategoryPicker from "../components/CategoryPicker";
 import { useToast } from "../components/Toast";
 import Switch from "../components/Switch";
 
@@ -68,13 +68,12 @@ export default function ImportPage({
   const [targetDir, setTargetDir] = useState("");
   const [useTempDir, setUseTempDir] = useState(false);
   const [placement, setPlacement] = useState<"move" | "keep">("move");
-  const [categoryName, setCategoryName] = useState("");
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [suggestedCategories, setSuggestedCategories] = useState<string[]>([]);
   const [note, setNote] = useState("");
-  const [showCategoryCreator, setShowCategoryCreator] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState("");
-  const [categoryBusy, setCategoryBusy] = useState(false);
   const [keyPresent, setKeyPresent] = useState<boolean | null>(null);
   const [aiFilling, setAiFilling] = useState(false);
+  const [aiUsage, setAiUsage] = useState<AiUsage | null>(null);
   const [showAiSetup, setShowAiSetup] = useState(false);
   const latestStagePaths = useRef<(paths: string[]) => void>(() => undefined);
 
@@ -113,7 +112,7 @@ export default function ImportPage({
     if (autoAi && aiConfigured === false) onAutoAiChange(false);
   }, [autoAi, aiConfigured, onAutoAiChange]);
 
-  const fillWithAi = async (paths: string[], automatic = false) => {
+  const fillWithAi = async (paths: string[]) => {
     if (paths.length === 0) return;
     if (aiConfigured !== true) {
       setShowAiSetup(true);
@@ -121,17 +120,21 @@ export default function ImportPage({
     }
 
     setAiFilling(true);
+    setAiUsage(null);
     try {
       const suggestion = await api.analyzePath(paths[0]);
       setNote(suggestion.summary);
-      if (suggestion.suggestedCategory) {
-        setCategoryName(suggestion.suggestedCategory);
-      }
+      setSuggestedCategories(suggestion.suggestedCategories);
+      setAiUsage(suggestion.usage ?? null);
+      setSelectedCategories((current) => [
+        ...new Set([...current, ...suggestion.suggestedCategories]),
+      ]);
       toast.ok(
-        automatic ? "AI 已自动填充" : "AI 已填好分类与备注",
+        "AI 已填入备注并选中建议分类",
         paths.length > 1 ? "按第一个文件生成，可在导入前继续修改" : undefined,
       );
     } catch (e) {
+      setAiUsage(null);
       toast.err("AI 填充失败，可手动填写", errorText(e));
     } finally {
       setAiFilling(false);
@@ -141,8 +144,10 @@ export default function ImportPage({
   const stagePaths = (paths: string[]) => {
     const next = mergePaths(stagedPaths, paths);
     setStagedPaths(next);
+    setSuggestedCategories([]);
+    setAiUsage(null);
     if (autoAi && aiConfigured === true && next.length > 0) {
-      void fillWithAi(next, true);
+      void fillWithAi(next);
     }
   };
   latestStagePaths.current = stagePaths;
@@ -156,7 +161,7 @@ export default function ImportPage({
         targetDir: useTempDir && targetDir.trim() ? targetDir : null,
         placement,
         analyzeAfter: false,
-        category: categoryName || null,
+        categories: selectedCategories,
         note: note || null,
         origin: origin ?? null,
       });
@@ -164,7 +169,12 @@ export default function ImportPage({
       setStagedPaths(
         result.items.filter((item) => item.error).map((item) => item.sourcePath),
       );
-      if (result.succeeded > 0) setNote("");
+      if (result.succeeded > 0) {
+        setNote("");
+        setSelectedCategories([]);
+        setSuggestedCategories([]);
+        setAiUsage(null);
+      }
 
       if (result.failed > 0) {
         const firstError = result.items.find((item) => item.error)?.error;
@@ -270,32 +280,6 @@ export default function ImportPage({
     }
   };
 
-  const createCategory = async () => {
-    const name = newCategoryName.trim();
-    if (!name) return;
-    setCategoryBusy(true);
-    try {
-      const created = await api.createCategory(name);
-      const next = [...categories, created].sort((a, b) =>
-        a.name.localeCompare(b.name, "zh-CN"),
-      );
-      onCategoriesChange(next);
-      setCategoryName(created.name);
-      setNewCategoryName("");
-      setShowCategoryCreator(false);
-      toast.ok("分类已建好", created.name);
-    } catch (e) {
-      toast.err("新建分类失败", errorText(e));
-    } finally {
-      setCategoryBusy(false);
-    }
-  };
-
-  const suggestedOnlyCategory =
-    categoryName && !categories.some((category) => category.name === categoryName)
-      ? categoryName
-      : null;
-
   return (
     <>
       <div className="page-head page-head-solo">
@@ -329,7 +313,10 @@ export default function ImportPage({
             <button
               className="btn-icon"
               type="button"
-              onClick={() => setStagedPaths([])}
+              onClick={() => {
+                setStagedPaths([]);
+                setAiUsage(null);
+              }}
               disabled={busy}
               title="清空待导入列表"
               aria-label="清空待导入列表"
@@ -347,11 +334,12 @@ export default function ImportPage({
                 <button
                   className="btn-icon"
                   type="button"
-                  onClick={() =>
+                  onClick={() => {
                     setStagedPaths((current) =>
                       current.filter((item) => pathKey(item) !== pathKey(path)),
-                    )
-                  }
+                    );
+                    setAiUsage(null);
+                  }}
                   disabled={busy}
                   title="移出待导入列表"
                   aria-label={`移除 ${fileName(path)}`}
@@ -399,53 +387,14 @@ export default function ImportPage({
 
           <div className="field import-category">
             <span>分类</span>
-            <div className="category-chips" role="group" aria-label="选择分类">
-              <button
-                className={`category-chip${categoryName ? "" : " selected"}`}
-                type="button"
-                aria-pressed={!categoryName}
-                onClick={() => setCategoryName("")}
-              >
-                {!categoryName && <Check size={13} />}
-                不分类
-              </button>
-              {categories.map((category) => {
-                const selected = category.name === categoryName;
-                return (
-                  <button
-                    className={`category-chip${selected ? " selected" : ""}`}
-                    type="button"
-                    key={category.id}
-                    aria-pressed={selected}
-                    onClick={() => setCategoryName(category.name)}
-                  >
-                    {selected && <Check size={13} />}
-                    {category.name}
-                  </button>
-                );
-              })}
-              {suggestedOnlyCategory && (
-                <button
-                  className="category-chip selected ai-suggested"
-                  type="button"
-                  aria-pressed="true"
-                  onClick={() => setCategoryName(suggestedOnlyCategory)}
-                >
-                  <Sparkles size={13} />
-                  {suggestedOnlyCategory}
-                </button>
-              )}
-              <button
-                className="category-chip category-chip-create"
-                type="button"
-                onClick={() => setShowCategoryCreator((shown) => !shown)}
-                disabled={categoryBusy || busy}
-                aria-expanded={showCategoryCreator}
-              >
-                <Plus size={13} />
-                新建分类
-              </button>
-            </div>
+            <CategoryPicker
+              categories={categories}
+              selected={selectedCategories}
+              suggested={suggestedCategories}
+              onChange={setSelectedCategories}
+              onCategoriesChange={onCategoriesChange}
+              disabled={busy}
+            />
           </div>
 
           <label className="field import-note">
@@ -459,47 +408,6 @@ export default function ImportPage({
             />
           </label>
         </div>
-
-        {showCategoryCreator && (
-          <div className="category-creator">
-            <Plus size={16} aria-hidden="true" />
-            <input
-              className="input"
-              value={newCategoryName}
-              onChange={(e) => setNewCategoryName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  void createCategory();
-                }
-                if (e.key === "Escape") setShowCategoryCreator(false);
-              }}
-              placeholder="输入新分类名称"
-              autoFocus
-            />
-            <button
-              className="btn btn-sm"
-              type="button"
-              onClick={createCategory}
-              disabled={!newCategoryName.trim() || categoryBusy}
-            >
-              <Check size={14} />
-              创建
-            </button>
-            <button
-              className="btn-icon"
-              type="button"
-              onClick={() => {
-                setShowCategoryCreator(false);
-                setNewCategoryName("");
-              }}
-              aria-label="取消新建分类"
-              title="取消"
-            >
-              <X size={15} />
-            </button>
-          </div>
-        )}
 
         <div className="import-actions">
           <div className="row row-wrap">
@@ -525,16 +433,18 @@ export default function ImportPage({
             onClick={() => void doImport(stagedPaths)}
             disabled={stagedPaths.length === 0 || busy}
           >
-            {busy ? "正在导入…" : `导入 ${stagedPaths.length || ""} 项`}
+            {busy ? "正在导入…" : "导入"}
           </button>
         </div>
+
+        <AiUsageLine usage={aiUsage} />
 
         <div className="auto-ai-row">
           <div className="auto-ai-copy">
             <Sparkles size={16} aria-hidden="true" />
             <div>
               <strong>自动 AI 填充</strong>
-              <span>加入文件后，自动生成分类和备注建议。</span>
+              <span>加入文件后，自动填备注并选中分类建议，可再增删。</span>
             </div>
           </div>
           <Switch
@@ -546,7 +456,7 @@ export default function ImportPage({
               }
               onAutoAiChange(enabled);
               if (enabled && stagedPaths.length > 0) {
-                void fillWithAi(stagedPaths, true);
+                void fillWithAi(stagedPaths);
               }
             }}
             disabled={aiConfigured === null || busy}
