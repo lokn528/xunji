@@ -1,12 +1,33 @@
-# 循迹
+<p align="center">
+  <img src="./docs/assets/icon.png" width="112" height="112" alt="循迹应用图标">
+</p>
 
-> 所有丢过的东西，有迹可循。
+<h1 align="center">循迹</h1>
+
+<p align="center"><strong>所有丢过的东西，有迹可循。</strong></p>
+
+<p align="center">
+  <img alt="Windows 11" src="https://img.shields.io/badge/Windows-11-0B1322?logo=windows11&logoColor=white">
+  <img alt="Tauri 2" src="https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white">
+  <img alt="React 19" src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=0B1322">
+  <img alt="MIT License" src="https://img.shields.io/badge/license-MIT-E4B863">
+</p>
 
 给丢过的每个文件发一张「户口卡」——一句话说明 + 截图 + 分类 + 日期，随时能顺着
 卡片找回它在电脑里的确切位置。
 
 循迹**不是文件管理器**。它不接管你的文件存储，只做参谋：文件本体始终留在本机，
 数据库只存路径与元数据。
+
+## 界面
+
+<p align="center">
+  <img src="./docs/screenshots/import.jpg" width="100%" alt="循迹导入界面：拖入文件后填写分类和备注，也可以让 AI 智能填充">
+</p>
+
+| 分类与筛选 | 模型与存储设置 |
+|:---:|:---:|
+| <img src="./docs/screenshots/categories.jpg" width="100%" alt="循迹分类界面：按文件格式、内容分类和时间筛选"> | <img src="./docs/screenshots/settings.jpg" width="100%" alt="循迹设置界面：配置存储位置和模型接入"> |
 
 ## 怎么打开
 
@@ -126,8 +147,15 @@ specs/001-xunji-v1/   # 规格、计划、数据模型、任务清单、走查�
 
 ## 边界
 
-v1 明确不做：文件内容编辑、云同步、账号体系、全文检索、AI 自动归档决策、
-浏览器插件。链接收集由「淘金客」承担。
+v1 明确不做：文件内容编辑、云同步、账号体系、全文检索、AI 自动归档决策。
+
+网页链接收集和浏览器插件尚未实现，计划在后续版本加入。
+
+## 后续计划
+
+- 网页链接收集与浏览器插件。
+- PDF 首页缩略图。
+- 文件正文全文检索。
 
 ## 许可
 
